@@ -399,8 +399,9 @@ class Spectrometer(abstract.Spectrometer):
 
     def integrate(self, seconds):
         self._osc.set_timebase(seconds)
-        osc_screen = np.array(self._osc.measure())
-        return self._count_photons(osc_screen)
+        self._osc.trigger_now()
+        osc_screen = self._osc.get_data()
+        return self._count_photons(osc_screen[configs.OSC_CHANNEL])
     
     def _count_photons(self, osc_screen):
         # TODO: save threshold in configuration.
