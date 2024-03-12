@@ -28,21 +28,28 @@ class DRV8825(abstract.MotorDriver):
                 (True, True, True)   , #Sixteenth
                )
 
-    def __init__(self, ttls: dict, mode: int = 0):
+    def __init__(self, ttls: dict, stepping: int = 0):
         for ttl in ttls:
             setattr(self, ttl, ttls[ttl])
+        self._stepping = stepping
+        self.set_stepping(self._stepping)
 
-    def set_stepping(self, mode: int):
-        m1, m2, m3 = self._MODES[mode]
+    def set_stepping(self, stepping: int):
+        m1, m2, m3 = self._MODES[stepping]
         try:
-            self.ms1.set_state(m1)
-            self.ms2.set_state(m2)
-            self.ms3.set_state(m3)
+            self.m1.set_state(m1)
+            self.m2.set_state(m2)
+            self.m3.set_state(m3)
         except AttributeError:
-            print("Error: stepping pins not configured.")
-
+            # TODO: add some kind of warning that this is the default.
+            self._stepping = 0
+            
     def get_stepping(self):
-        return self._MODES.index((self.ms1.state, self.ms2.state, self.ms3.state))
+        try:
+            self._stepping = self._MODES.index((self.m1.state, self.m2.state, self.m3.state))
+            return self._stepping
+        except AttributeError:
+            return self._stepping
 
     # Obs: Minimum pulse duration is 1 micro second.
     # Obs2: slope has to be rising for step pin to work.
