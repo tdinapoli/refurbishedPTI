@@ -2,15 +2,15 @@
 import redpipy as rpp
 
 EMISSION_MONO_DRIVER = {
-'pin_step'  :  rpp.digital.RPDO(state=True, pin=('p', 4)),
-'direction'  :  rpp.digital.RPDO(state=True, pin=('p', 5)),
-'limit_switch'  :  rpp.digital.RPDO(state=True, pin=('p', 3)),
+'pin_step'  :  ('p', 4),
+'pin_direction'  :  ('p', 5),
+'limit_switch'  : ('p', 3),
         }
 
 EXCITATION_MONO_DRIVER = {
-'pin_step'  :  rpp.digital.RPDO(state=True, pin=('p', 6)),
-'direction'  :  rpp.digital.RPDO(state=True, pin=('p', 7)),
-'limit_switch'  :  rpp.digital.RPDO(state=True, pin=('p', 2)),
+'pin_step'  :  ('p', 6),
+'pin_direction'  :  ('p', 7),
+'limit_switch'  :  ('p', 2),
         }
 
 PEAK_THRESHOLD = -3.5
