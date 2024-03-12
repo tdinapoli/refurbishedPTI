@@ -279,7 +279,11 @@ class Spectrometer(abstract.Spectrometer):
                 excitation_calibration_path = None,
                 ):
         self.emission_mono = emission_mono
+
         self._osc = osc
+        self._osc.channel1.enabled = True
+        self._osc.channel1.set_gain(20)
+
         self.excitation_mono = excitation_mono
         if emission_calibration_path:
             self.emission_mono.load_calibration(emission_calibration_path)
