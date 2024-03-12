@@ -161,13 +161,13 @@ class Monochromator:
         MOTOR: abstract.Motor = M061CS02,
         ):
         ttls = {
-            "pin_step" : rpp.digital.RPDO(False, pin_step),
-            "direction": rpp.digital.RPDO(True, pin_direction),
+            "pin_step" : rpp.digital.RPDO(pin_step, state=False),
+            "direction": rpp.digital.RPDO(pin_direction, state=True),
         }
 
         driver = MOTOR_DRIVER(ttls)
         motor = MOTOR(driver)
-        limit_switch = rpp.digital.RPDI(limit_switch)
+        limit_switch = rpp.digital.RPDI(pin=limit_switch)
         return cls(motor, limit_switch=limit_switch)
 
     @property
@@ -306,12 +306,12 @@ class Spectrometer(abstract.Spectrometer):
                             ):
 
         emission_mono = MONOCHROMATOR.constructor_default(
-                        configs.EMISSION_MONO_DRIVER
+                        **configs.EMISSION_MONO_DRIVER
                         )
 
         osc = OSCILLOSCOPE()
         excitation_mono = MONOCHROMATOR.constructor_default(
-                        configs.EXCITATION_MONO_DRIVER
+                        **configs.EXCITATION_MONO_DRIVER
                         )
         common_path = '/root/refurbishedPTI-files'
         excitation_calibration_path = f'{common_path}/excitation_calibration.yaml'
