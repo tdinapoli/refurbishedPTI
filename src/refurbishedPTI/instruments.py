@@ -140,7 +140,9 @@ class M061CS02(abstract.Motor):
 class Monochromator:
     def __init__(self,
                 motor: abstract.Motor,
-                limit_switch: rpp.digital.RPDI
+                limit_switch: rpp.digital.RPDI,
+                # TODO: improve path handling
+                calibration_path: str = None,
                 ):
         # TODO: move this to calibration.
         self.CALIB_ATTRS = [ '_wl_step_ratio',
@@ -150,6 +152,8 @@ class Monochromator:
                     '_home_wavelength']
         self._motor = motor
         self._limit_switch = limit_switch
+        if calibration_path is not None:
+            self.load_calibration(calibration_path)
 
     @classmethod
     def constructor_default(
@@ -159,6 +163,7 @@ class Monochromator:
         limit_switch: tuple[Literal["n", "p"], int],
         MOTOR_DRIVER: abstract.MotorDriver = DRV8825,
         MOTOR: abstract.Motor = M061CS02,
+        calibration_path: str = None,
         ):
         ttls = {
             "pin_step" : rpp.digital.RPDO(pin_step, state=False),
@@ -168,7 +173,8 @@ class Monochromator:
         driver = MOTOR_DRIVER(ttls)
         motor = MOTOR(driver)
         limit_switch = rpp.digital.RPDI(pin=limit_switch)
-        return cls(motor, limit_switch=limit_switch)
+        return cls(motor, limit_switch=limit_switch,
+                    calibration_path=calibration_path)
 
     @property
     def wavelength(self):
@@ -282,8 +288,6 @@ class Spectrometer(abstract.Spectrometer):
                 emission_mono: Monochromator,
                 osc: rpp.osci.Oscilloscope,
                 excitation_mono: Monochromator,
-                emission_calibration_path = None,
-                excitation_calibration_path = None,
                 ):
         self.emission_mono = emission_mono
 
@@ -292,11 +296,6 @@ class Spectrometer(abstract.Spectrometer):
         self._osc.channel1.set_gain(20)
 
         self.excitation_mono = excitation_mono
-        if emission_calibration_path:
-            self.emission_mono.load_calibration(emission_calibration_path)
-        if excitation_calibration_path:
-            self.excitation_mono.load_calibration(excitation_calibration_path)
-
 
     @classmethod
     def constructor_default(
@@ -313,12 +312,7 @@ class Spectrometer(abstract.Spectrometer):
         excitation_mono = MONOCHROMATOR.constructor_default(
                         **configs.EXCITATION_MONO_DRIVER
                         )
-        common_path = '/root/refurbishedPTI-files'
-        excitation_calibration_path = f'{common_path}/excitation_calibration.yaml'
-        emission_calibration_path = f'{common_path}/emission_calibration.yaml'
-        return cls(emission_mono, osc, excitation_mono,
-                   excitation_calibration_path=excitation_calibration_path,
-                   emission_calibration_path=emission_calibration_path)
+        return cls(emission_mono, osc, excitation_mono)
 
     # TODO: leave this method here or directly call self.emission_mono.goto_wavelength
     def goto_wavelength(self, wavelength):
