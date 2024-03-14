@@ -294,6 +294,7 @@ class Spectrometer(abstract.Spectrometer):
         self._osc = osc
         self._osc.channel1.enabled = True
         self._osc.channel1.set_gain(20)
+        self._osc.configure_trigger()
 
         self.excitation_mono = excitation_mono
 
