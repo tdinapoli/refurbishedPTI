@@ -331,7 +331,8 @@ class Spectrometer(abstract.Spectrometer):
         df = self.get_spectrum(integration_time=integration_time,
                                static_wavelength=excitation_wavelength,
                                emission=True,
-                               feed=feed
+                               feed=feed,
+                               **kwargs
                                )
         df.attrs["type"] = "emission_spectrum"
         df.attrs["excitation_wavelength"] = excitation_wavelength
@@ -397,13 +398,19 @@ class Spectrometer(abstract.Spectrometer):
 
     def get_intensity(self, seconds, rounds: int = 1):
         photons = 0
+        # TODO: see if this loop can be moved to a lower level stage
+        # so that it takes less time to complete.
         for _ in range(rounds):
             photons += self.integrate(seconds)
-        # TODO: check if amount_datapoints works with new API
-        time_measured = rounds * self._osc.amount_datapoints/self._osc.sampling_rate
+        # TODO: check if amount_datapoints works with new API. Res: works with _ at beginning
+        # TODO: change osci API or find another solution to amount_datapoints
+        time_measured = rounds * self._osc._amount_datapoints/self._osc.get_timebase_settings()["sampling_rate"]
         return photons, time_measured
 
     def integrate(self, seconds):
+        # TODO: timebase should always be at maximum sampling rate.
+        # change this function to integrate for any amount of seconds
+        # but keep msr.
         self._osc.set_timebase(seconds)
         self._osc.trigger_now()
         osc_screen = self._osc.get_data()
@@ -411,13 +418,14 @@ class Spectrometer(abstract.Spectrometer):
     
     def _count_photons(self, osc_screen):
         # TODO: save threshold in configuration.
-        times, heights = self._find_signal_peaks(-osc_screen, configs.PEAK_THRESHOLD)
+        times = self._find_signal_peaks(-osc_screen, configs.PEAK_THRESHOLD)
         return len(times)
 
     def _find_signal_peaks(self, osc_screen, threshold, offset=0):
         # TODO: calibrate this
-        peaks = np.where(np.diff(osc_screen) < threshold)[0]
-        return peaks/self._osc.sampling_rate + offset
+        peaks = np.where(np.diff(osc_screen) > threshold)[0]
+        sampling_rate = self._osc.get_timebase_settings()["sampling_rate"]
+        return peaks/sampling_rate + offset
 
     def set_wavelength(self, wavelength: float):
         return self.emission_mono.set_wavelength(wavelength)
@@ -465,6 +473,6 @@ class Spectrometer(abstract.Spectrometer):
                 screen = np.array(self._osc.get_triggered())
                 # Aca también, cambiar los números por calibracion/configuracion
                 times = self._find_signal_peaks(screen, 0.16, 0.18)
-                times = (peak_positions + buff_offset) / self._osc.sampling_rate
+                times = (peak_positions + buff_offset) / self._osc.get_timebase_settings()["sampling_rate"]
                 counts = np.hstack((counts, times))
         return counts    
