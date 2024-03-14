@@ -263,7 +263,7 @@ class Monochromator:
         if ending_wavelength is None:
             ending_wavelength = self.max_wl
         if wavelength_step is None:
-            wavelength_step = self.wl_step_ratio
+            wavelength_step = abs(self.wl_step_ratio)
 
         n_measurements = int((ending_wavelength - starting_wavelength)/wavelength_step)
         for i in range(n_measurements):
