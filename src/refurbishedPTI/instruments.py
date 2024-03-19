@@ -414,8 +414,12 @@ class Spectrometer(abstract.Spectrometer):
         # but keep msr.
         self._osc.set_timebase(seconds)
         self._osc.trigger_now()
-        osc_screen = self._osc.get_data()
-        return self._count_photons(osc_screen[configs.OSC_CHANNEL])
+        osc_screen = self._osc.channel1.get_trace()
+        # TODO: decide if i keep get_data (full dataframe) or just
+        # get_trace.
+        #osc_screen = self._osc.get_data()
+        #photons = self._count_photons(osc_screen[configs.OSC_CHANNEL])
+        return self._count_photons(osc_screen)
     
     def _count_photons(self, osc_screen):
         # TODO: save threshold in configuration.
