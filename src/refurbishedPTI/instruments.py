@@ -346,7 +346,8 @@ class Spectrometer(abstract.Spectrometer):
         df = self.get_spectrum(integration_time=integration_time,
                         static_wavelength=emission_wavelength,
                         emission=False,
-                        feed=feed
+                        feed=feed,
+                        **kwargs
                         )
         df.attrs["type"] = "excitation_spectrum"
         df.attrs["emission_wavelength"] = emission_wavelength
