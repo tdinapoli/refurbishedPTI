@@ -10,9 +10,9 @@ Type help or ? to list commands.\n"""
     prompt = "(spec-calib)"
     file = None
 
-    def __init__(self, spec):
+    def __init__(self, mono):
         super(SpectrometerCalibrationInterface, self).__init__()
-        self.spec = spec
+        self.mono = mono
         self.calibration = {
             "max_wl": None,
             "min_wl": None,
@@ -24,7 +24,7 @@ Type help or ? to list commands.\n"""
         "Set maximum Spectrometer wavelength"
         try:
             max_wl = float(max_wl)
-            # self.spec._max_wl = max_wl
+            # self.mono._max_wl = max_wl
             self.calibration["max_wl"] = max_wl
         except:
             print("Wrong argument")
@@ -34,7 +34,7 @@ Type help or ? to list commands.\n"""
         "Set maximum Spectrometer wavelength"
         try:
             min_wl = float(min_wl)
-            # self.spec._min_wl = min_wl
+            # self.mono._min_wl = min_wl
             self.calibration["min_wl"] = min_wl
         except:
             print("Wrong argument")
@@ -42,12 +42,12 @@ Type help or ? to list commands.\n"""
 
     def do_growth_direction(self, arg):
         "Set wavelength growth direction for the monocromator motor"
-        self.gd_ui = GrowthDirection(self.spec, self.calibration)
+        self.gd_ui = GrowthDirection(self.mono, self.calibration)
         self.gd_ui.cmdloop()
 
     def do_wavelength_to_step_ratio(self, arg):
         "Set wavelength to step ratio for the spectrometer"
-        self.wl_to_step_ui = WavelengthStepRatio(self.spec, self.calibration)
+        self.wl_to_step_ui = WavelengthStepRatio(self.mono, self.calibration)
         self.wl_to_step_ui.cmdloop()
 
     def do_quit(self, arg):
@@ -69,7 +69,7 @@ Type help or ? to list commands.\n"""
         try:
             path = str(path)
             # Esto no se hace pero bueno por ahora lo hago así
-            self.spec.calibration_path = path
+            self.mono.calibration_path = path
             with open(path, "w") as f:
                 yaml.dump(self.calibration, f)
         except:
@@ -89,9 +89,9 @@ for a given step change.
     """
     prompt = "(wavelength-step-ratio)"
 
-    def __init__(self, spec, calibration_dict):
+    def __init__(self, mono, calibration_dict):
         super(WavelengthStepRatio, self).__init__()
-        self.spec = spec
+        self.mono = mono
         self.calibration_dict = calibration_dict
         self._direction_dict = {True: "clockwise", False: "counter clockwise"}
 
@@ -106,7 +106,7 @@ for a given step change.
         print("Calculating...")
         wl_step_ratio = self.calculate_ratio()
         print(f"Setting wavelength to step ratio to {wl_step_ratio} nm/step")
-        # self.spec._wl_step_ratio = wl_deg_ratio
+        # self.mono._wl_step_ratio = wl_deg_ratio
         self.calibration_dict["wl_step_ratio"] = wl_step_ratio
         self.onecmd("quit")
 
@@ -140,7 +140,7 @@ for a given step change.
             steps = int(steps)
             print(steps)
             self.cw, self.rotation_steps = steps > 0, abs(steps)
-            self.spec._motor.rotate_step(self.rotation_steps, self.cw)
+            self.mono._motor.rotate_step(self.rotation_steps, self.cw)
             print(f"Rotate {self.rotation_steps} steps {self._direction_dict[self.cw]}")
         except Exception as e:
             print(e)
@@ -167,7 +167,7 @@ for a given step change.
         print(f"Rotation steps:\t {self.rotation_steps}")
         ratio = (self.final_wavelength - self.initial_wavelength) / self.rotation_steps
         print(f"(final_wl - initial_wl)/steps = {ratio}")
-        # self.spec._wl_deg_ratio = ratio
+        # self.mono._wl_deg_ratio = ratio
         self.calibration_dict["wl_step_ratio"] = ratio
 
 
@@ -186,9 +186,9 @@ Input set_growth_direction to set the growth direction.
     """
     prompt = f"(growth-direction)"
 
-    def __init__(self, spec, calibration_dict):
+    def __init__(self, mono, calibration_dict):
         super(GrowthDirection, self).__init__()
-        self.spec = spec
+        self.mono = mono
         self.calibration_dict = calibration_dict
         self.steps = 1
         self.small_rotation = 10
@@ -196,30 +196,30 @@ Input set_growth_direction to set the growth direction.
 
     def do_r(self, arg):
         "Rotate monochromator motor 10 steps clockwise"
-        self.spec._motor.rotate_step(self.small_rotation, True)
+        self.mono._motor.rotate_step(self.small_rotation, True)
 
     def do_l(self, arg):
         "Rotate monochromator motor 10 steps clockwise"
-        self.spec._motor.rotate_step(self.small_rotation, False)
+        self.mono._motor.rotate_step(self.small_rotation, False)
 
     def do_R(self, arg):
         "Rotate monochromator motor 100 steps clockwise"
-        self.spec._motor.rotate_step(self.large_rotation, True)
+        self.mono._motor.rotate_step(self.large_rotation, True)
 
     def do_L(self, arg):
         "Rotate monochromator motor 100 steps clockwise"
-        self.spec._motor.rotate_step(self.large_rotation, False)
+        self.mono._motor.rotate_step(self.large_rotation, False)
 
     def do_set_growth_direction(self, cw: str):
         """Set wavelength growth direction.\n
         Usage: Input True for clowckwise or False for counter clockwise"""
         cw = cw.lower()
         if cw == "true":
-            # self.spec._greater_wl_cw = True
+            # self.mono._greater_wl_cw = True
             self.calibration_dict["greater_wl_cw"] = True
             return True
         elif cw == "false":
-            # self.spec._greater_wl_cw = False
+            # self.mono._greater_wl_cw = False
             self.calibration_dict["greater_wl_cw"] = False
             return True
         else:
@@ -239,7 +239,7 @@ class TestMotor:
         return angle
 
 
-class TestSpec:
+class TestMono:
     def __init__(self):
         self._motor = TestMotor()
         self._max_wl = None
@@ -253,5 +253,5 @@ class TestSpec:
 
 
 if __name__ == "__main__":
-    spec = TestSpec()
-    hola = spec.calibrate()
+    mono = TestMono()
+    hola = mono.calibrate()
