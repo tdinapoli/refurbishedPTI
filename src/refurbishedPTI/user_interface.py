@@ -88,6 +88,7 @@ Type help or ? to list commands.\n"""
         path = f"/root/.local/refurbishedPTI/configs/{mono}_calibration.yaml"
         self.mono.calibration_path = path
 
+        print(f"saving calibration file to {path}")
         with open(path, "w") as f:
             yaml.dump(self.calibration, f)
 
