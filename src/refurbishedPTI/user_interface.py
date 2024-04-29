@@ -56,25 +56,40 @@ Type help or ? to list commands.\n"""
 
     def do_print_calibration(self, arg):
         "Prints currently configured calibartion"
-        directions = {True: "Clockwise", False: "Counter Clockwise", None: "None"}
         for key in self.calibration:
             print(f"{key}:\t\t\t{self.calibration[key]}")
 
-    def do_save_to_yaml(self, path):
+    def do_save_to_yaml(self):
         "Save calibration to yaml.\nInput filepath."
+
         if None in self.calibration.values():
             print("At least one configuration parameter is not set.")
             print("Set them first.")
             return
+
+        print("What monochromator are you calibrating?")
+        print("(1) emission")
+        print("(2) excitation")
+
         try:
-            path = str(path)
-            # Esto no se hace pero bueno por ahora lo hago así
-            self.mono.calibration_path = path
-            with open(path, "w") as f:
-                yaml.dump(self.calibration, f)
-        except:
-            print("Wrong argument")
-            print("You must input the file path for the calibration file")
+            answer = int(input())
+        except ValueError:
+            print(f"Answer should be either 1 or 2, not {answer}")
+            return
+
+        if answer not in (1, 2):
+            print(f"Answer should be either 1 or 2, not {answer}")
+            return
+        elif answer == 1:
+            mono = "emission"
+        elif answer == 2:
+            mono = "excitation"
+
+        path = f"/root/.local/refurbishedPTI/configs/{mono}_calibration.yaml"
+        self.mono.calibration_path = path
+
+        with open(path, "w") as f:
+            yaml.dump(self.calibration, f)
 
 
 class WavelengthStepRatio(cmd.Cmd):

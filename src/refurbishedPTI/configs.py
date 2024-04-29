@@ -1,4 +1,3 @@
-import redpipy as rpp
 import yaml
 
 EMISSION_MONO_DRIVER = yaml.full_load(
