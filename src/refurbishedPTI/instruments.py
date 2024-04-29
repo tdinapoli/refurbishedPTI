@@ -238,7 +238,7 @@ class Monochromator:
     def load_calibration(self, path: str):  # wavelength
         # TODO: make a better implementation of calibration loading.
         with open(path, "r") as f:
-            self._calibration = yaml.safe_load(f)
+            self._calibration = yaml.full_load(f)
         for param in self._calibration:
             setattr(self, f"_{param}", self._calibration[param])
         calibration_complete = True
