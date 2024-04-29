@@ -292,10 +292,11 @@ class Monochromator:
 class Spectrometer(abstract.Spectrometer):
     def __init__(
         self,
+        excitation_mono: Monochromator,
         emission_mono: Monochromator,
         osc: rpp.osci.Oscilloscope,
-        excitation_mono: Monochromator,
     ):
+        self.excitation_mono = excitation_mono
         self.emission_mono = emission_mono
 
         self._osc = osc
@@ -303,24 +304,24 @@ class Spectrometer(abstract.Spectrometer):
         self._osc.channel1.set_gain(5)
         self._osc.configure_trigger()
 
-        self.excitation_mono = excitation_mono
-
     @classmethod
     def constructor_default(
         cls,
-        # TODO: pass monochromator instances.
-        MONOCHROMATOR=Monochromator,
-        OSCILLOSCOPE=rpp.Oscilloscope,
+        excitation_mono: Monochromator = None,
+        emission_mono: Monochromator = None,
+        osc: rpp.Oscilloscope = None,
     ):
-        emission_mono = MONOCHROMATOR.constructor_default(
-            **configs.EMISSION_MONO_DRIVER
-        )
-
-        osc = OSCILLOSCOPE()
-        excitation_mono = MONOCHROMATOR.constructor_default(
-            **configs.EXCITATION_MONO_DRIVER
-        )
-        return cls(emission_mono, osc, excitation_mono)
+        if excitation_mono is None:
+            excitation_mono = Monochromator.constructor_default(
+                **configs.EXCITATION_MONO_DRIVER
+            )
+        if emission_mono is None:
+            emission_mono = Monochromator.constructor_default(
+                **configs.EMISSION_MONO_DRIVER
+            )
+        if osc is None:
+            osc = rpp.Oscilloscope()
+        return cls(excitation_mono, emission_mono, osc)
 
     # TODO: leave this method here or directly call self.emission_mono.goto_wavelength
     def goto_wavelength(self, wavelength):
