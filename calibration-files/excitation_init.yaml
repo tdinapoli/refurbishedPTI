@@ -1,0 +1,4 @@
+pin_step: !!python/tuple ["p", 6]
+pin_direction: !!python/tuple ["p", 7]
+limit_switch: !!python/tuple ["p", 2]
+calibration_path: "/root/refurbishedPTI-files/excitation_calibration.yaml"

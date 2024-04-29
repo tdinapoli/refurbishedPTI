@@ -1,0 +1,5 @@
+greater_wl_cw: false
+max_wl: 850.0
+min_wl: 150.0
+wl_step_ratio: -0.5
+home_wavelength: 255

@@ -1,0 +1,17 @@
+LD_OUTPUT:
+  polarity: CG # CG or AG
+  voltage_protection: 2.0 # Volts
+LD_SOURCE:
+  operating_mode: current #current or power
+  laser_current_limit: 0.600 #amps
+  optical_power_limit: 0.3 #watts
+LD_SOURCE_SETPOINTS:
+  laser_current: 0.02 # Amps
+LD_MODULATION:
+  modulation: off #on / off
+QCW_PULSE:
+  qcw_mode: on #on / off
+  trigger_source: internal #internal / external
+  frequency: 100.0 # hz
+  duty_cycle: 10 # %
+  hold: dcycle #width / dcycle
