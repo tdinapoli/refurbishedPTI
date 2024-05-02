@@ -309,7 +309,7 @@ class Spectrometer(abstract.Spectrometer):
         cls,
         excitation_mono: Monochromator = None,
         emission_mono: Monochromator = None,
-        osc: rpp.Oscilloscope = None,
+        osc: rpp.osci.Oscilloscope = None,
     ):
         if excitation_mono is None:
             excitation_mono = Monochromator.constructor_default(
@@ -438,23 +438,22 @@ class Spectrometer(abstract.Spectrometer):
         # but keep msr.
         self._osc.set_timebase(seconds)
         self._osc.trigger_now()
-        osc_screen = self._osc.channel1.get_trace()
+        data = self._osc.get_data()
+        # data = self._osc.channel1.get_trace()
         # TODO: decide if i keep get_data (full dataframe) or just
         # get_trace.
         # osc_screen = self._osc.get_data()
         # photons = self._count_photons(osc_screen[configs.OSC_CHANNEL])
-        return self._count_photons(osc_screen)
+        return self._count_photons(data)
 
-    def _count_photons(self, osc_screen):
+    def _count_photons(self, data):
         # TODO: save threshold in configuration.
-        times = self._find_signal_peaks(-osc_screen, configs.PEAK_THRESHOLD)
+        times = self._find_arrival_times(data, configs.PEAK_THRESHOLD)
         return len(times)
 
-    def _find_signal_peaks(self, osc_screen, threshold, offset=0):
+    def _find_arrival_times(self, data):
         # TODO: calibrate this
-        peaks = np.where(np.diff(osc_screen) > threshold)[0]
-        sampling_rate = self._osc.get_timebase_settings()["sampling_rate"]
-        return peaks / sampling_rate + offset
+        return data.iloc[np.where(np.diff(data.ch1) > configs.PEAK_THRESHOLD)[0]]
 
     def set_wavelength(self, wavelength: float):
         return self.emission_mono.set_wavelength(wavelength)
@@ -470,43 +469,23 @@ class Spectrometer(abstract.Spectrometer):
             f"Monochromator wavelength should be {self.emission_mono.home_wavelength}"
         )
         print(
-            f"If they are wrong, set them with spec.lamp.set_wavelength() and spec.monochromator.set_wavelength()"
+            "If they are wrong, set them with spec.lamp.set_wavelength() and spec.monochromator.set_wavelength()"
         )
 
-    # TODO: change this for new API.
-    @property
-    def decay_configuration(self):
-        if self._osc.channel == 0 and self._osc.trig_src == 8:
-            state = True
-        elif self._osc.channel == 1 and self._osc.trig_src == 4:
-            state = True
-        else:
-            state = False
-        return state
+    def set_decay_configuration(self):
+        trace_duration = self._osc.set_decimation(1)
+        self._osc.configure_trigger(source="ch2", level=1.0, positive_edge=False)
+        self._osc.set_trigger_delay(1)
+        return trace_duration
 
-    # TODO: change this for new API.
-    @decay_configuration.setter
-    def decay_configuration(self, val):
-        self._osc.decimation = 0
-        self._osc.trigger_pre = 0
-        self._osc.trigger_post = self._osc.buffer_size
-        if val:
-            self._osc.set_trigger(channel=1, edge="pos", level=1.0)
-        else:
-            self._osc.set_trigger(channel=None)
-
-    # TODO: Change this for new API.
-    def acquire_decay(self, amount_windows=1, amount_buffers=1):
-        self.decay_configuration = True
+    def acquire_decay(self, amount_windows=1, amount_buffers=1, step: float = 1):
+        self.set_decay_configuration()
         counts = np.array([])
-        for window in range(amount_windows):
-            buff_offset = window * self._osc.amount_datapoints
+        for buff_ofset in np.arange(1, amount_windows + 1, step):
+            self._osc.set_trigger_delay(buff_ofset)
             for _ in range(amount_buffers):
-                screen = np.array(self._osc.get_triggered())
-                # Aca también, cambiar los números por calibracion/configuracion
-                times = self._find_signal_peaks(screen, 0.16, 0.18)
-                times = (
-                    peak_positions + buff_offset
-                ) / self._osc.get_timebase_settings()["sampling_rate"]
+                self._osc.arm_trigger()
+                data = self._osc.get_data()
+                times = self._find_arrival_times(data)
                 counts = np.hstack((counts, times))
         return counts
