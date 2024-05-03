@@ -226,10 +226,10 @@ class ITC4020:
         # revisar: agregar para que apague modulation
         if mode:
             print(f"{self.qcw_mode=}, {mode=}")
-            self.itc.write(f"source:function:shape pulse")
+            self.itc.write("source:function:shape pulse")
         else:
             print(f"{self.qcw_mode=}, {mode=}")
-            self.itc.write(f"source:function:shape dc")
+            self.itc.write("source:function:shape dc")
 
     @property
     def trigger_source(self):
@@ -561,12 +561,15 @@ class Spectrometer(abstract.Spectrometer):
         self._osc.channel1.set_gain(5)
         self._osc.configure_trigger()
 
+        self.emission_mono.home()
+        self.excitation_mono.home()
+
     @classmethod
     def constructor_default(
         cls,
         excitation_mono: Monochromator = None,
         emission_mono: Monochromator = None,
-        osc: rpp.osci.Oscilloscope = None,
+        osc = None#: rpp.osci.Oscilloscope = None,
     ):
         if excitation_mono is None:
             excitation_mono = Monochromator.constructor_default(
