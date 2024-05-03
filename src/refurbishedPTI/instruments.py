@@ -738,10 +738,10 @@ class Spectrometer(abstract.Spectrometer):
         self._osc.set_trigger_delay(1)
         return trace_duration
 
-    def acquire_decay(self, amount_windows=1, amount_buffers=1, step: float = 1):
+    def acquire_decay(self, max_delay=1, step: float = 1, amount_buffers=1):
         self.set_decay_configuration()
         counts = np.array([])
-        for buff_ofset in np.arange(1, amount_windows + 1, step):
+        for buff_ofset in np.arange(1, max_delay + 1, step):
             self._osc.set_trigger_delay(buff_ofset)
             for _ in range(amount_buffers):
                 self._osc.arm_trigger()
