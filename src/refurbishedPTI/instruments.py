@@ -1,32 +1,289 @@
 """
-    refurbishedPTI.instruments
-    ~~~~~~~~~~~~~~~
+refurbishedPTI.instruments
+~~~~~~~~~~~~~~~
 
-    Refurbished HoribaPTI instruments.
+Refurbished HoribaPTI instruments.
 
 
-    :copyright: 2024 by redpipy Authors, see AUTHORS for more details.
-    :license: BSD, see LICENSE for more details.
+:copyright: 2024 by redpipy Authors, see AUTHORS for more details.
+:license: BSD, see LICENSE for more details.
 """
+
+import time
+from typing import Literal
+
+import numpy as np
+import pandas as pd
+import pyvisa
+import redpipy as rpp
+import yaml
 
 from . import abstract, configs
 from . import user_interface as ui
-from typing import Literal
 
-import redpipy as rpp
-import yaml
-import pandas as pd
-import numpy as np
+
+class ITC4020:
+    def __init__(self, config_path, verbose=False):
+        self.RESOURCE_STRING = "USB0::4883::32842::M00404162::0::INSTR"
+        self.TIMEOUT = 100000
+        self.ID = "Thorlabs,ITC4001,M00404162,1.8.0/1.5.0/2.3.0\n"
+        rm = pyvisa.ResourceManager("@py")
+        self.itc = rm.open_resource(self.RESOURCE_STRING)
+        self._establish_connection()
+        self.load_configuration(config_path, verbose=verbose)
+
+    def query(self, *args, **kwargs):
+        return self.itc.query(*args, **kwargs)
+
+    def _establish_connection(self):
+        start = time.time()
+        while time.time() - start < self.TIMEOUT:
+            try:
+                msg = self.itc.query("*IDN?")
+                if msg == self.ID:
+                    print(f"Connection established as expected\n{msg}")
+                    return True
+                else:
+                    print(f"Connection established to unknown instrument\n{msg}")
+            except Exception as e:
+                print(e)
+        raise TimeoutError
+
+    def load_configuration(self, path, verbose=False):
+        try:
+            with open(path, "r") as f:
+                self._configuration = yaml.full_load(f)
+        except FileNotFoundError:
+            print(f"Error: configuration file '{path}' not found.")
+            return
+        for menu_name, menu_vals in self._configuration.items():
+            if verbose:
+                print(f"Setting {menu_name} vals:")
+            for parameter, value in menu_vals.items():
+                print(f"{parameter=} {value=}")
+                if hasattr(self, parameter):
+                    setattr(self, parameter, value)
+                    if verbose:
+                        print(f"{parameter} = {value}")
+                else:
+                    print(f"ITC4020 has no attribute {parameter}")
+
+    def turn_on_laser(self):
+        if self.keylock_tripped:
+            print("Please unlock safety key")
+            return
+        if self.modulation and self.qcw_mode == "PULS":
+            print("Both modulation and QCW mode are on.")
+            print("Turn one off before turning on the LASER.")
+            return
+        self.tec_output = True
+        while self.temp_tripped:
+            print("Waiting for laser to cool")
+            time.sleep(1)
+        self.ld_output = True
+        time.sleep(2)
+
+    # esto hay que cambiarlo para que no dependa de una config file
+    def get_configuration(self, path):
+        try:
+            with open(path, "r") as f:
+                config = yaml.full_load(f)
+        except FileNotFoundError:
+            print(f"Error: configuration file '{path}' not found.")
+            return
+        for menu_name, menu_params in config.items():
+            print(f"{menu_name} values:")
+            for param in menu_params:
+                print(f"{param} = {getattr(self, param)}")
+
+    @property
+    def ld_output(self):
+        return bool(int(self.itc.query("output:state?")))
+
+    @ld_output.setter
+    def ld_output(self, state):
+        try:
+            state = int(state)
+            if state not in [0, 1]:
+                print("state should be either 0 or 1, not {state}")
+                return
+            self.itc.write(f"output:state {int(state)}")
+        except ValueError as e:
+            print(e)
+
+    @property
+    def tec_output(self):
+        return bool(int(self.itc.query("output2:state?")))
+
+    @tec_output.setter
+    def tec_output(self, state):
+        try:
+            state = int(state)
+            if state not in [0, 1]:
+                print("state should be either 0 or 1, not {state}")
+                return
+            self.itc.write(f"output2:state {int(state)}")
+        except ValueError as e:
+            print(e)
+
+    @property
+    def temp_tripped(self):
+        return bool(int(self.itc.query("sense3:temperature:protection:tripped?")))
+
+    @property
+    def polarity(self):
+        return self.itc.query("output:polarity?")
+
+    @polarity.setter
+    def polarity(self, polarity_value):
+        print(f"setting polarity to {polarity_value}?")
+        if polarity_value in ["CG", "AG"]:
+            print("writing polarity")
+            self.itc.write(f"output:polarity {polarity_value}")
+            print("written")
+        else:
+            print("Wrong polarity value")
+
+    @property
+    def voltage_protection(self):
+        return self.itc.query("output:protection:voltage?")
+
+    @voltage_protection.setter
+    def voltage_protection(self, voltage_limit):
+        print("setting voltage_protection")
+        self.itc.write(f"output:protection:voltage {voltage_limit}")
+        print("setted")
+
+    @property
+    def operating_mode(self):
+        return self.itc.query("source:function:mode?")
+
+    @operating_mode.setter
+    def operating_mode(self, mode):
+        if mode in ["current", "power"]:
+            self.itc.write(f"source:function:mode {mode}")
+        else:
+            print("Wrong operating mode")
+
+    @property
+    def laser_current_limit(self):
+        return self.itc.query("source:current:limit?")
+
+    @laser_current_limit.setter
+    def laser_current_limit(self, limit):
+        self.itc.write(f"source:current:limit {limit}")
+
+    @property
+    def optical_power_limit(self):
+        return self.itc.query("sense:power:protection?")
+
+    @optical_power_limit.setter
+    def optical_power_limit(self, limit):
+        self.itc.write(f"sense:power:protection {limit}")
+
+    @property
+    def optical_power(self):
+        return float(self.itc.query("measure:power2?")[:-1])
+
+    @property
+    def temperature(self):
+        return float(self.itc.query("measure:temperature?")[:-1])
+
+    @property
+    def laser_current(self):
+        return float(self.itc.query("source:current?")[:-1])
+
+    @laser_current.setter
+    def laser_current(self, current):
+        self.itc.write(f"source:current {current}")
+
+    @property
+    def modulation(self):
+        return bool(int(self.itc.query("source:am:state?")[:-1]))
+
+    @modulation.setter
+    def modulation(self, state):
+        # revisar: agregar para que apague qcw
+        state = bool(state) * 1
+        self.itc.write(f"source:am:state {state}")
+
+    @property
+    def qcw_mode(self):
+        resp = self.itc.query("source:function:shape?")[:-1]
+        if resp == "PULS":
+            return True
+        else:
+            return False
+
+    @qcw_mode.setter
+    def qcw_mode(self, mode):
+        # mode = False -> dc
+        # mode = True -> pulse
+        print(f"{self.qcw_mode=}, {mode=}")
+        if mode == self.qcw_mode:
+            print("Already in that mode")
+            return
+        # revisar: agregar para que apague modulation
+        if mode:
+            print(f"{self.qcw_mode=}, {mode=}")
+            self.itc.write(f"source:function:shape pulse")
+        else:
+            print(f"{self.qcw_mode=}, {mode=}")
+            self.itc.write(f"source:function:shape dc")
+
+    @property
+    def trigger_source(self):
+        return self.itc.query("trigger:source?")
+
+    @trigger_source.setter
+    def trigger_source(self, source):
+        if source in ["internal", "external"]:
+            self.itc.write(f"trigger:source {source}")
+        else:
+            print(f"Source {source} not supported")
+
+    @property
+    def frequency(self):
+        val = float(self.itc.query("source:pulse:period?"))
+        return 1 / val
+
+    @frequency.setter
+    def frequency(self, value):
+        self.itc.write(f"source:pulse:period {1/value}")
+
+    @property
+    def duty_cycle(self):
+        return float(self.itc.query("source:pulse:dcycle?")[:-1])
+
+    @duty_cycle.setter
+    def duty_cycle(self, dc):
+        self.itc.write(f"source:pulse:dcycle {dc}")
+
+    @property
+    def hold(self):
+        return self.itc.query("source:pulse:hold?")
+
+    @hold.setter
+    def hold(self, value):
+        if value in ["width", "dcycle"]:
+            self.itc.write(f"source:pulse:hold {value}")
+        else:
+            print(f"Hold parameter {value} is not supported")
+
+    @property
+    def keylock_tripped(self):
+        return bool(int(self.itc.query("output:protection:keylock:tripped?")))
+
 
 class DRV8825(abstract.MotorDriver):
     ttls: dict
     _MODES = (
-                (False, False, False), #Full step
-                (True, False, False) , #Half 
-                (False, True, False) , #Quarter
-                (True, True, False)  , #Eighth
-                (True, True, True)   , #Sixteenth
-               )
+        (False, False, False),  # Full step
+        (True, False, False),  # Half
+        (False, True, False),  # Quarter
+        (True, True, False),  # Eighth
+        (True, True, True),  # Sixteenth
+    )
 
     def __init__(self, ttls: dict, stepping: int = 0):
         for ttl in ttls:
