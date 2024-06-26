@@ -725,13 +725,15 @@ class Spectrometer(abstract.Spectrometer):
     def set_excitation_wavelength(self, wavelength: float):
         return self.excitation_mono.set_wavelength(wavelength)
 
-    def home(self):
-        self.excitation_mono.home()
-        self.emission_mono.home()
-        print(f"Lamp wavelength should be {self.excitation_mono.home_wavelength}")
-        print(
-            f"Monochromator wavelength should be {self.emission_mono.home_wavelength}"
-        )
+    def home(self, excitation=True, emission=True):
+        if excitation:
+            self.excitation_mono.home()
+            print(f"Lamp wavelength should be {self.excitation_mono.home_wavelength}")
+        if emission:
+            self.emission_mono.home()
+            print(
+                f"Monochromator wavelength should be {self.emission_mono.home_wavelength}"
+            )
         print(
             "If they are wrong, set them with spec.lamp.set_wavelength() and spec.monochromator.set_wavelength()"
         )
