@@ -533,13 +533,14 @@ class Monochromator:
     def home(self, set_wavelength=True):
         steps_done = 0
         # This ensures ending wavelength is above 0.
-        steps_limit = self.home_wavelength / self.wl_step_ratio
-        while self.limit_switch.state and steps_done < abs(steps_limit):
+        steps_limit = abs(self.home_wavelength / self.wl_step_ratio)
+        # TODO: if you start at the home_wavelength, this doesn't work
+        while self.limit_switch.state and steps_done < steps_limit:
             self._motor.rotate_step(1, not self._greater_wl_cw)
             steps_done += 1
         if set_wavelength and steps_done < steps_limit:
             self.set_wavelength(self.home_wavelength)
-        elif steps_done >= abs(steps_limit):
+        elif steps_done >= steps_limit:
             print("Danger warning:")
             print(
                 f"Wavelength could not be set. Call home method again if and only if wavelength is greater than {self.home_wavelength}"
