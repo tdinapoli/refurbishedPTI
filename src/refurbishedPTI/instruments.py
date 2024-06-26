@@ -552,7 +552,8 @@ class Spectrometer(abstract.Spectrometer):
         self,
         excitation_mono: Monochromator,
         emission_mono: Monochromator,
-        osc: rpp.osci.Oscilloscope,
+        osc,#: rpp.osci.Oscilloscope,
+        home: bool=False
     ):
         self.excitation_mono = excitation_mono
         self.emission_mono = emission_mono
@@ -562,15 +563,17 @@ class Spectrometer(abstract.Spectrometer):
         self._osc.channel1.set_gain(5)
         self._osc.configure_trigger()
 
-        self.emission_mono.home()
-        self.excitation_mono.home()
+        if home:
+            self.emission_mono.home()
+            self.excitation_mono.home()
 
     @classmethod
     def constructor_default(
         cls,
         excitation_mono: Monochromator = None,
         emission_mono: Monochromator = None,
-        osc = None#: rpp.osci.Oscilloscope = None,
+        osc = None,#: rpp.osci.Oscilloscope = None,
+        home: bool = False,
     ):
         if excitation_mono is None:
             excitation_mono = Monochromator.constructor_default(
@@ -582,7 +585,7 @@ class Spectrometer(abstract.Spectrometer):
             )
         if osc is None:
             osc = rpp.Oscilloscope()
-        return cls(excitation_mono, emission_mono, osc)
+        return cls(excitation_mono, emission_mono, osc, home=home)
 
     # TODO: leave this method here or directly call self.emission_mono.goto_wavelength
     def goto_wavelength(self, wavelength):
