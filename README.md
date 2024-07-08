@@ -103,3 +103,33 @@ df = spec.get_emission(
 
 which returns a Pandas DataFrame with wavelength, counts, and integration time as columns.
 Get an excitation spectrum in a simmilar manner by calling get_excitation.by calling get_excitation.
+
+To take a lifetime measurement import and initialize the ITC4020 laser power supply class
+
+```python
+from refurbishedPTI.instruments import ITC4020
+itc = ITC4020(config_path)
+```
+
+configure it for the desired measurement and turn on the laser
+
+```python
+itc.qcw_mode = True
+itc.frequency(100) # Sets frequency at 100 Hz
+itc.current(0.1)   # Sets current at 0.1 A
+itc.duty_cycle(80) # Sets the duty cycle at 80%
+itc.laser_on(True)
+```
+
+and finally configure the spectrometer and start the measurement by calling acquire_decay method
+
+```python
+spec.set_decay_configuration()
+counts = spec.acquire_decay(
+    t0=0,               # In ms after trigger
+    tf=2,               # In ms after trigger
+    amount_counts=1000, # Amount of counts
+)
+```
+
+which returns a Pandas DataFrame with a single column called arrival_times, that has the photon arrival times.
