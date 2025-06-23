@@ -397,7 +397,7 @@ class Monochromator:
     def __init__(
         self,
         motor: abstract.Motor,
-        limit_switch: rpp.digital.RPDI,
+        limit_switch,#: rpp.digital.RPDI,
         # TODO: improve path handling
         calibration_path: str = None,
     ):
@@ -530,10 +530,14 @@ class Monochromator:
         for i in range(n_measurements):
             yield self.goto_wavelength(starting_wavelength + i * wavelength_step)
 
-    def home(self, set_wavelength=True):
+    def home(self, set_wavelength=True, ignore_limit=False):
         steps_done = 0
         # This ensures ending wavelength is above 0.
-        steps_limit = abs(self.home_wavelength / self.wl_step_ratio)
+        if ignore_limit:
+            print("WARNING: IGNORING LIMIT SWITCH SAFETY LIMIT")
+            steps_limit = 2e3
+        else:
+            steps_limit = abs(self.home_wavelength / self.wl_step_ratio)
         # TODO: if you start at the home_wavelength, this doesn't work
         while self.limit_switch.state and steps_done < steps_limit:
             self._motor.rotate_step(1, not self._greater_wl_cw)
@@ -663,7 +667,7 @@ class Spectrometer(abstract.Spectrometer):
         ending_wavelength: float = None,
         wavelength_step: float = None,
         rounds: int = 1,
-        path=None,
+        feed_wl=None,
     ):
         if emission:
             monochromator = self.emission_mono
@@ -676,17 +680,21 @@ class Spectrometer(abstract.Spectrometer):
                 wavelength_step=wavelength_step,
             )
         ):
+            if feed_wl is not None:
+                feed_data = feed_wl(wl)
+            else:
+                feed_data = None
             photons, time_measured = self.get_intensity(
-                integration_time, rounds, path=path
+                integration_time, rounds, feed_data=feed_data
             )
             yield dict(wavelength=wl, counts=photons, integration_time=time_measured)
 
-    def get_intensity(self, seconds, rounds: int = 1, path=None):
+    def get_intensity(self, seconds, rounds: int = 1, feed_data=None):
         photons = 0
         # TODO: see if this loop can be moved to a lower level stage
         # so that it takes less time to complete.
         for _ in range(rounds):
-            photons += self.integrate(seconds)
+            photons += self.integrate(seconds, feed_data=feed_data)
         # TODO: check if amount_datapoints works with new API. Res: works with _ at beginning
         # TODO: change osci API or find another solution to amount_datapoints
         time_measured = (
@@ -696,23 +704,31 @@ class Spectrometer(abstract.Spectrometer):
         )
         return photons, time_measured
 
-    def integrate(self, seconds):
+    def integrate(self, seconds, feed_data: callable = None):
         # TODO: timebase should always be at maximum sampling rate.
         # change this function to integrate for any amount of seconds
         # but keep msr.
-        self._osc.set_timebase(seconds)
-        self._osc.trigger_now()
-        data = self._osc.get_data()
+        t_2nd_dec = 0.00026
+        reps = int(seconds/t_2nd_dec)
+        photons = 0
+        for rep in range(reps):
+            self._osc.set_timebase(t_2nd_dec)
+            self._osc.trigger_now()
+            data = self._osc.get_data()
+            feed_data(data, rep) 
+            #TEST
+            #data.to_pickle(f"/root/.local/refurbishedPTI/measurements/2024-06-25/tests/{self.emission_mono.wavelength}_{rep}.pickle")
+            photons += self._count_photons(data)
         # data = self._osc.channel1.get_trace()
         # TODO: decide if i keep get_data (full dataframe) or just
         # get_trace.
         # osc_screen = self._osc.get_data()
         # photons = self._count_photons(osc_screen[configs.OSC_CHANNEL])
-        return self._count_photons(data)
+        return photons
 
     def _count_photons(self, data):
         # TODO: save threshold in configuration.
-        times = self._find_arrival_times(data, configs.PEAK_THRESHOLD)
+        times = self._find_arrival_times(data)
         return len(times)
 
     def _find_arrival_times(self, data):
@@ -738,20 +754,29 @@ class Spectrometer(abstract.Spectrometer):
             "If they are wrong, set them with spec.lamp.set_wavelength() and spec.monochromator.set_wavelength()"
         )
 
-    def set_decay_configuration(self):
-        trace_duration = self._osc.set_decimation(1)
+    def set_decay_configuration(self, decimation=2):
+        trace_duration = self._osc.set_decimation(decimation)
+        # TODO: this has to be changed in the Osci API so that you don't have to specify
+        # a time when you ask for full buffer
+        #trace_duration = self._osc.set_timebase(decimation=decimation)
+        self._osc.channel2.enabled = True
+        self._osc.channel2.set_gain(5)
         self._osc.configure_trigger(source="ch2", level=1.0, positive_edge=False)
         self._osc.set_trigger_delay(1)
         return trace_duration
 
-    def acquire_decay(self, max_delay=1, step: float = 1, amount_buffers=1):
+    def acquire_decay(self, max_delay=1, step: float = 1, amount_buffers=1, feed=None):
         self.set_decay_configuration()
-        counts = np.array([])
-        for buff_ofset in np.arange(1, max_delay + 1, step):
-            self._osc.set_trigger_delay(buff_ofset)
-            for _ in range(amount_buffers):
+        arrival_times = np.array([])
+        for buff_offset in np.arange(1, max_delay + 1, step):
+            print(f"{buff_offset=}")
+            self._osc.set_trigger_delay(buff_offset)
+            for buff in range(amount_buffers):
+                print(f"{buff=}")
                 self._osc.arm_trigger()
                 data = self._osc.get_data()
-                times = self._find_arrival_times(data)
-                counts = np.hstack((counts, times))
-        return counts
+                times = np.array(self._find_arrival_times(data).time)
+                if feed:
+                    feed(times)
+                arrival_times = np.hstack((arrival_times, times))
+        return pd.DataFrame(dict(arrival_times=arrival_times))
