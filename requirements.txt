@@ -89,7 +89,7 @@ pybind11==2.11.1
 pycparser==2.21
 pyfdt==0.3
 Pygments==2.16.1
-pylibiio @ file:///libiio-0.23/bindings/python
+#pylibiio @ file:///libiio-0.23/bindings/python
 pyparsing==2.4.7
 pyproject-metadata==0.7.1
 python-dateutil==2.8.2
@@ -102,9 +102,9 @@ PyYAML==6.0.1
 pyzmq==25.1.1
 qtconsole==5.4.4
 QtPy==2.4.0
--e git+https://github.com/redpitaya/jupyter.git@6ad2849016f09203bebbbb028f4cdbf8b7895177#egg=redpitaya
+#-e git+https://github.com/redpitaya/jupyter.git@6ad2849016f09203bebbbb028f4cdbf8b7895177#egg=redpitaya
 # Editable install with no version control (redpypi==0.1.dev18+ga4de537)
--e /root/redpipy
+#-e /root/redpipy
 referencing==0.30.2
 requests==2.31.0
 rfc3339-validator==0.1.4
