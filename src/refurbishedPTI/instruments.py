@@ -712,7 +712,7 @@ class Spectrometer(abstract.Spectrometer):
         reps = int(seconds/t_2nd_dec)
         photons = 0
         self._osc.set_timebase(t_2nd_dec)
-        buffer = np.empty(size=self._osc._amount_datapoints, dtype=np.float32)
+        buffer = np.empty(self._osc._amount_datapoints, dtype=np.float32)
         for rep in range(reps):
             self._osc.trigger_now()
             data = self._osc.get_voltage_numpy("ch1", out=buffer)
