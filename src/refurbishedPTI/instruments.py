@@ -711,8 +711,8 @@ class Spectrometer(abstract.Spectrometer):
         t_2nd_dec = 0.00026 * 2
         reps = int(seconds/t_2nd_dec)
         photons = 0
+        self._osc.set_timebase(t_2nd_dec)
         for rep in range(reps):
-            self._osc.set_timebase(t_2nd_dec)
             self._osc.trigger_now()
             data = self._osc.get_data()
             feed_data(data, rep) 
