@@ -704,7 +704,7 @@ class Spectrometer(abstract.Spectrometer):
         )
         return photons, time_measured
 
-    def integrate(self, seconds, feed_data: callable = None):
+    def integrate(self, seconds):
         # TODO: timebase should always be at maximum sampling rate.
         # change this function to integrate for any amount of seconds
         # but keep msr.
@@ -716,8 +716,6 @@ class Spectrometer(abstract.Spectrometer):
         for rep in range(reps):
             self._osc.trigger_now()
             data = self._osc.get_voltage_numpy("ch1", out=buffer)
-            if feed_data is not None:
-                feed_data(data, rep) 
             #TEST
             #data.to_pickle(f"/root/.local/refurbishedPTI/measurements/2024-06-25/tests/{self.emission_mono.wavelength}_{rep}.pickle")
             photons += self._count_pulses(data)
