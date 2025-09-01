@@ -713,12 +713,13 @@ class Spectrometer(abstract.Spectrometer):
         photons = 0
         self._osc.set_timebase(t_2nd_dec)
         buffer = np.empty(self._osc._amount_datapoints, dtype=np.float32)
+        diff_buffer = np.empty_like(buffer[1:])
         for rep in range(reps):
             self._osc.trigger_now()
             data = self._osc.get_voltage_numpy("ch1", out=buffer)
             #TEST
             #data.to_pickle(f"/root/.local/refurbishedPTI/measurements/2024-06-25/tests/{self.emission_mono.wavelength}_{rep}.pickle")
-            photons += self._count_pulses(data)
+            photons += self._count_pulses(data, diff_buffer=diff_buffer)
         # data = self._osc.channel1.get_trace()
         # TODO: decide if i keep get_data (full dataframe) or just
         # get_trace.
@@ -726,8 +727,12 @@ class Spectrometer(abstract.Spectrometer):
         # photons = self._count_photons(osc_screen[configs.OSC_CHANNEL])
         return photons
 
-    def _count_pulses(self, data):
-        return np.where(np.diff(data) > configs.PEAK_THRESHOLD)[0].shape[0]
+    def _count_pulses(self, data, diff_buffer: np.ndarray | None = None ):
+        if diff_buffer is None:
+            return np.count_nonzero(np.diff(data) > configs.PEAK_THRESHOLD)
+        else:
+            np.subtract(data[1:], data[:-1], out=diff_buffer)
+            return np.count_nonzero(diff_buffer > configs.PEAK_THRESHOLD)
 
     def _count_photons(self, data):
         # TODO: save threshold in configuration.
