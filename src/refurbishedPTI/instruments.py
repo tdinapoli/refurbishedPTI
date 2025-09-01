@@ -712,19 +712,23 @@ class Spectrometer(abstract.Spectrometer):
         reps = int(seconds/t_2nd_dec)
         photons = 0
         self._osc.set_timebase(t_2nd_dec)
+        buffer = np.empty(size=self._osc._amount_datapoints, dtype=np.float32)
         for rep in range(reps):
             self._osc.trigger_now()
-            data = self._osc.get_data()
+            data = self._osc.get_voltage_numpy("ch1", out=buffer)
             feed_data(data, rep) 
             #TEST
             #data.to_pickle(f"/root/.local/refurbishedPTI/measurements/2024-06-25/tests/{self.emission_mono.wavelength}_{rep}.pickle")
-            photons += self._count_photons(data)
+            photons += self._count_pulses(data)
         # data = self._osc.channel1.get_trace()
         # TODO: decide if i keep get_data (full dataframe) or just
         # get_trace.
         # osc_screen = self._osc.get_data()
         # photons = self._count_photons(osc_screen[configs.OSC_CHANNEL])
         return photons
+
+    def _count_pulses(self, data):
+        return np.where(np.diff(data) > configs.PEAK_THRESHOLD)[0].shape[0]
 
     def _count_photons(self, data):
         # TODO: save threshold in configuration.
