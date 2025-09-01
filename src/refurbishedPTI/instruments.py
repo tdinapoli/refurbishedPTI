@@ -708,7 +708,7 @@ class Spectrometer(abstract.Spectrometer):
         # TODO: timebase should always be at maximum sampling rate.
         # change this function to integrate for any amount of seconds
         # but keep msr.
-        t_2nd_dec = 0.00026
+        t_2nd_dec = 0.00026 * 2
         reps = int(seconds/t_2nd_dec)
         photons = 0
         for rep in range(reps):
