@@ -694,7 +694,7 @@ class Spectrometer(abstract.Spectrometer):
         # TODO: see if this loop can be moved to a lower level stage
         # so that it takes less time to complete.
         for _ in range(rounds):
-            photons += self.integrate(seconds, feed_data=feed_data)
+            photons += self.integrate(seconds)
         # TODO: check if amount_datapoints works with new API. Res: works with _ at beginning
         # TODO: change osci API or find another solution to amount_datapoints
         time_measured = (
