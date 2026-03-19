@@ -249,7 +249,7 @@ class ITC4020:
 
     @frequency.setter
     def frequency(self, value):
-        self.itc.write(f"source:pulse:period {1/value}")
+        self.itc.write(f"source:pulse:period {1 / value}")
 
     @property
     def duty_cycle(self):
@@ -397,7 +397,7 @@ class Monochromator:
     def __init__(
         self,
         motor: abstract.Motor,
-        limit_switch,#: rpp.digital.RPDI,
+        limit_switch,  #: rpp.digital.RPDI,
         # TODO: improve path handling
         calibration_path: str = None,
     ):
@@ -556,8 +556,8 @@ class Spectrometer(abstract.Spectrometer):
         self,
         excitation_mono: Monochromator,
         emission_mono: Monochromator,
-        osc,#: rpp.osci.Oscilloscope,
-        home: bool=False
+        osc,  #: rpp.osci.Oscilloscope,
+        home: bool = False,
     ):
         self.excitation_mono = excitation_mono
         self.emission_mono = emission_mono
@@ -576,7 +576,7 @@ class Spectrometer(abstract.Spectrometer):
         cls,
         excitation_mono: Monochromator = None,
         emission_mono: Monochromator = None,
-        osc = None,#: rpp.osci.Oscilloscope = None,
+        osc=None,  #: rpp.osci.Oscilloscope = None,
         home: bool = False,
     ):
         if excitation_mono is None:
@@ -709,15 +709,15 @@ class Spectrometer(abstract.Spectrometer):
         # change this function to integrate for any amount of seconds
         # but keep msr.
         t_2nd_dec = 0.00026 * 2
-        reps = int(seconds/t_2nd_dec)
+        reps = int(seconds / t_2nd_dec)
         photons = 0
         self._osc.set_timebase(t_2nd_dec)
         buffer = np.empty(self._osc._amount_datapoints, dtype=np.float32)
         for rep in range(reps):
             self._osc.trigger_now()
             data = self._osc.get_voltage_numpy("ch1", out=buffer)
-            #TEST
-            #data.to_pickle(f"/root/.local/refurbishedPTI/measurements/2024-06-25/tests/{self.emission_mono.wavelength}_{rep}.pickle")
+            # TEST
+            # data.to_pickle(f"/root/.local/refurbishedPTI/measurements/2024-06-25/tests/{self.emission_mono.wavelength}_{rep}.pickle")
             photons += self._count_pulses(data)
         # data = self._osc.channel1.get_trace()
         # TODO: decide if i keep get_data (full dataframe) or just
@@ -730,11 +730,6 @@ class Spectrometer(abstract.Spectrometer):
         binarized = data < configs.VOLTAGE_THRESHOLD
         edges = binarized[1:] & ~binarized[:-1]
         return np.count_nonzero(edges)
-
-    def _count_photons(self, data):
-        # TODO: save threshold in configuration.
-        times = self._find_arrival_times(data)
-        return len(times)
 
     def _find_arrival_times(self, data):
         # TODO: calibrate this
@@ -763,7 +758,7 @@ class Spectrometer(abstract.Spectrometer):
         trace_duration = self._osc.set_decimation(decimation)
         # TODO: this has to be changed in the Osci API so that you don't have to specify
         # a time when you ask for full buffer
-        #trace_duration = self._osc.set_timebase(decimation=decimation)
+        # trace_duration = self._osc.set_timebase(decimation=decimation)
         self._osc.channel2.enabled = True
         self._osc.channel2.set_gain(5)
         self._osc.configure_trigger(source="ch2", level=1.0, positive_edge=False)
