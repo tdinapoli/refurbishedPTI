@@ -1,17 +1,20 @@
 from dataclasses import dataclass
 import yaml
 
-path_test = ""#"/home/tomi/Documents/academicos/facultad/tesis/packages/refurbishedPTI/.rp_dirs_simulation"
-path_emission = path_test+"/root/.local/refurbishedPTI/configs/emission_init.yaml"
-path_excitation = path_test+"/root/.local/refurbishedPTI/configs/excitation_init.yaml"
-with open(path_emission, 'r') as f:
+path_test = ""  # "/home/tomi/Documents/academicos/facultad/tesis/packages/refurbishedPTI/.rp_dirs_simulation"
+path_emission = path_test + "/root/.local/refurbishedPTI/configs/emission_init.yaml"
+path_excitation = path_test + "/root/.local/refurbishedPTI/configs/excitation_init.yaml"
+with open(path_emission, "r") as f:
     EMISSION_MONO_DRIVER = yaml.full_load(f)
 
-with open(path_excitation, 'r') as f:
+with open(path_excitation, "r") as f:
     EXCITATION_MONO_DRIVER = yaml.full_load(f)
 
 
 PEAK_THRESHOLD = 0.5
+
+# TODO: Check if this is necessary.
+VOLTAGE_THRESHOLD = 1
 
 ## Decay configurations
 # PULSE_WIDTH = 10e-9  # s
@@ -19,6 +22,7 @@ PEAK_THRESHOLD = 0.5
 # RP_BUF_SIZE = 2**14
 # LASER_FREQ = 80  # hz
 # LASER_DC = 50  # %
+
 
 # Gui
 # Adjust values
@@ -29,8 +33,8 @@ class Gui:
     DEFAULT_INTEGRATION_TIME: float = 0.1
     MIN_INTEGRATION_TIME: float = 0.01
     MAX_INTEGRATION_TIME: float = 30
-    MEASUREMENT_PATH: str = '/root/.local/refurbishedPTI/measurements'
-    #MEASUREMENT_PATH: str = '/home/tomi/.local/refurbishedPTI/measurements'
+    MEASUREMENT_PATH: str = "/root/.local/refurbishedPTI/measurements"
+    # MEASUREMENT_PATH: str = '/home/tomi/.local/refurbishedPTI/measurements'
     MIN_COUNTS: int = 0
     MAX_COUNTS: int = 1e6
     min_freq: float = 1
