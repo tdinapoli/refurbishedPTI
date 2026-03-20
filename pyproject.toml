@@ -56,6 +56,6 @@ addopts = "--import-mode=importlib --doctest-modules"
 pythonpath = "src"
 
 [tool.ruff]
-select = ["E", "F", "I"]
+lint.select = ["E", "F", "I"]
 extend-include = ["*.ipynb"]
 exclude = ["csrc/sources"]
