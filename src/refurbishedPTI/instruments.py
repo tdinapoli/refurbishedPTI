@@ -728,18 +728,14 @@ class Spectrometer(abstract.Spectrometer):
             data = self._osc.get_voltage_numpy("ch1", out=buffer)
             # TEST
             # data.to_pickle(f"/root/.local/refurbishedPTI/measurements/2024-06-25/tests/{self.emission_mono.wavelength}_{rep}.pickle")
-            photons += self._count_pulses(data)
+            photons += np.count_nonzero(self._get_edges(data))
+
         # data = self._osc.channel1.get_trace()
         # TODO: decide if i keep get_data (full dataframe) or just
         # get_trace.
         # osc_screen = self._osc.get_data()
         # photons = self._count_photons(osc_screen[configs.OSC_CHANNEL])
         return photons
-
-    def _count_pulses(self, data) -> int:
-        binarized = data < configs.VOLTAGE_THRESHOLD
-        edges = binarized[1:] & ~binarized[:-1]
-        return np.count_nonzero(edges)
 
     def _find_arrival_times(self, data) -> npt.NDArray:
         # TODO: calibrate this
