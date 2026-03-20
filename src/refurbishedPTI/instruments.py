@@ -596,7 +596,7 @@ class Spectrometer(abstract.Spectrometer):
         return cls(excitation_mono, emission_mono, osc, home=home)
 
     # TODO: leave this method here or directly call self.emission_mono.goto_wavelength
-    def goto_wavelength(self, wavelength) ->:
+    def goto_wavelength(self, wavelength):
         return self.emission_mono.goto_wavelength(wavelength)
 
     def goto_excitation_wavelength(self, wavelength):
@@ -697,7 +697,9 @@ class Spectrometer(abstract.Spectrometer):
             )
             yield dict(wavelength=wl, counts=photons, integration_time=time_measured)
 
-    def get_intensity(self, seconds, rounds: int = 1, feed_data=None) -> tuple[int, float]:
+    def get_intensity(
+        self, seconds, rounds: int = 1, feed_data=None
+    ) -> tuple[int, float]:
         photons = 0
         # TODO: see if this loop can be moved to a lower level stage
         # so that it takes less time to complete.
@@ -775,7 +777,9 @@ class Spectrometer(abstract.Spectrometer):
         self._osc.set_trigger_delay(1)
         return trace_duration
 
-    def acquire_decay(self, max_delay=1, step: float = 1, amount_buffers=1, feed=None) -> pd.DataFrame:
+    def acquire_decay(
+        self, max_delay=1, step: float = 1, amount_buffers=1, feed=None
+    ) -> pd.DataFrame:
         self.set_decay_configuration()
         arrival_times = np.array([])
         for buff_offset in np.arange(1, max_delay + 1, step):
