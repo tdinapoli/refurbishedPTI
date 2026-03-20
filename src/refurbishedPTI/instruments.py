@@ -745,6 +745,10 @@ class Spectrometer(abstract.Spectrometer):
         # TODO: calibrate this
         return data.iloc[np.where(np.diff(data.ch1) > configs.PEAK_THRESHOLD)[0]]
 
+    def _get_edges(self, data) -> npt.NDArray:
+        binarized = data < configs.VOLTAGE_THRESHOLD
+        return binarized[1:] & ~binarized[:-1]
+
     def set_wavelength(self, wavelength: float) -> None:
         # TODO: delete this return
         return self.emission_mono.set_wavelength(wavelength)
