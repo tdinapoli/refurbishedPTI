@@ -9,10 +9,12 @@ Refurbished HoribaPTI instruments.
 :license: BSD, see LICENSE for more details.
 """
 
+import pathlib
 import time
-from typing import Literal
+from typing import Generator, Literal, Type
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 import pyvisa
 import redpipy as rpp
@@ -291,7 +293,7 @@ class DRV8825(abstract.MotorDriver):
         self._stepping = stepping
         self.set_stepping(self._stepping)
 
-    def set_stepping(self, stepping: int):
+    def set_stepping(self, stepping: int) -> None:
         m1, m2, m3 = self._MODES[stepping]
         try:
             self.m1.set_state(m1)
@@ -316,7 +318,7 @@ class DRV8825(abstract.MotorDriver):
         self.pin_step.pulse(ontime, offtime, amount)
 
 
-class M061CS02(abstract.Motor):
+class M061CS02(abstract.StepperMotor):
     _STEPS_MODE = (200, 400, 800, 1600, 3200)
 
     def __init__(self, driver, steps: int = 400, angle: float = 0.0):
@@ -328,11 +330,11 @@ class M061CS02(abstract.Motor):
         self._min_offtime = 10e-3
         self._min_ontime = 10e-3
 
-    def rotate(self, angle: float):
+    def rotate(self, angle: float) -> float:
         relative_angle = angle - self._angle
         return self.rotate_relative(relative_angle)
 
-    def rotate_relative(self, angle: float, change_angle: bool = True):
+    def rotate_relative(self, angle: float, change_angle: bool = True) -> float:
         cw, angle = self._cw_from_angle(angle), abs(angle)
         self._driver.direction.set_state(cw)
         steps = self._steps_from_angle(angle)
@@ -340,7 +342,7 @@ class M061CS02(abstract.Motor):
         angle_rotated = self._angle_sign(cw) * self._angle_from_steps(steps)
         return angle_rotated
 
-    def rotate_step(self, steps: int, cw: bool, change_angle: bool = True):
+    def rotate_step(self, steps: int, cw: bool, change_angle: bool = True) -> None:
         self._driver.direction.set_state(cw)
         self._driver.step(
             ontime=self._min_ontime, offtime=self._min_offtime, amount=steps
@@ -351,57 +353,56 @@ class M061CS02(abstract.Motor):
                 self._angle + angle_change_sign * self.min_angle * steps, 5
             )
 
-    def _angle_sign(self, cw: bool):
+    def _angle_sign(self, cw: bool) -> int:
         return 2 * cw - 1
 
-    def _angle_from_steps(self, steps: int):
+    def _angle_from_steps(self, steps: int) -> float:
         if steps >= 0:
             return self.min_angle * steps
         else:
             raise ValueError(f"steps should be greater than 0, not {steps}.")
 
-    def _steps_from_angle(self, angle: float):
+    def _steps_from_angle(self, angle: float) -> int:
         if angle >= 0:
             return int(angle / self.min_angle)
         else:
             raise ValueError(f"angle should be greater than 0, not {angle}.")
 
-    def _cw_from_angle(self, angle: float):
+    def _cw_from_angle(self, angle: float) -> bool:
         return angle > 0
 
     @property
-    def angle(self):
+    def angle(self) -> float:
         return self._angle
 
     @property
-    def angle_relative(self):
+    def angle_relative(self) -> float:
         return self._angle % 360
 
     @property
-    def min_angle(self):
+    def min_angle(self) -> float:
         return 360 / self.steps
 
     @property
-    def steps(self):
+    def steps(self) -> int:
         return self._STEPS_MODE[self._driver.get_stepping()]
 
     @steps.setter
-    def steps(self, steps: int = 200):
+    def steps(self, steps: int = 200) -> None:
         self._driver.set_stepping(self._STEPS_MODE.index(steps))
 
-    def set_origin(self, angle: float = 0):
+    def set_origin(self, angle: float = 0) -> None:
         self._angle = angle
 
 
 class Monochromator:
     def __init__(
         self,
-        motor: abstract.Motor,
+        motor: abstract.StepperMotor,
         limit_switch,  #: rpp.digital.RPDI,
-        # TODO: improve path handling
-        calibration_path: str = None,
+        calibration_path: pathlib.Path | None = None,
     ):
-        # TODO: move this to calibration.
+        # TODO: add a calibration sub-dataclass
         self.CALIB_ATTRS = [
             "_wl_step_ratio",
             "_greater_wl_cw",
@@ -420,10 +421,11 @@ class Monochromator:
         pin_step: tuple[Literal["n", "p"], int],
         pin_direction: tuple[Literal["n", "p"], int],
         limit_switch: tuple[Literal["n", "p"], int],
-        MOTOR_DRIVER: abstract.MotorDriver = DRV8825,
-        MOTOR: abstract.Motor = M061CS02,
-        calibration_path: str = None,
+        MOTOR_DRIVER: Type[abstract.MotorDriver] = DRV8825,
+        MOTOR: Type[abstract.StepperMotor] = M061CS02,
+        calibration_path: pathlib.Path | None = None,
     ):
+        # TODO: make a typed dict for this, or solve the problem in a different way
         ttls = {
             "pin_step": rpp.digital.RPDO(pin_step, state=False),
             "direction": rpp.digital.RPDO(pin_direction, state=True),
@@ -435,42 +437,43 @@ class Monochromator:
         return cls(motor, limit_switch=limit_switch, calibration_path=calibration_path)
 
     @property
-    def wavelength(self):
+    def wavelength(self) -> float:
         try:
             return self._wavelength
         except:
             return None
 
+    # TODO: move all this to cached property and return .config
     @property
-    def min_wl(self):
+    def min_wl(self) -> float:
         return self._min_wl
 
     @property
-    def max_wl(self):
+    def max_wl(self) -> float:
         return self._max_wl
 
     @property
-    def greater_wl_cw(self):
+    def greater_wl_cw(self) -> bool:
         return self._greater_wl_cw
 
     @property
-    def wl_step_ratio(self):
+    def wl_step_ratio(self) -> float:
         return self._wl_step_ratio
 
     @property
-    def home_wavelength(self):
+    def home_wavelength(self) -> float:
         return self._home_wavelength
 
-    def set_wavelength(self, wavelength: float):
+    def set_wavelength(self, wavelength: float) -> None:
         if self.check_safety(wavelength):
             self._wavelength = wavelength
         else:
             print(f"Wavelength must be between {self._min_wl} and {self._max_wl}")
 
-    def check_safety(self, wavelength):
+    def check_safety(self, wavelength) -> bool:
         return self._min_wl <= wavelength <= self._max_wl
 
-    def goto_wavelength(self, wavelength: float):
+    def goto_wavelength(self, wavelength: float) -> float:
         if self.check_safety(wavelength):
             steps = self._steps_from_wl(wavelength)
             cw = self._cw_from_wl(wavelength)
@@ -480,10 +483,10 @@ class Monochromator:
             print(f"Wavelength must be between {self._min_wl} and {self._max_wl}")
         return self._wavelength
 
-    def _steps_from_wl(self, wavelength: float):
+    def _steps_from_wl(self, wavelength: float) -> int:
         return abs(int((wavelength - self.wavelength) / self._wl_step_ratio))
 
-    def _cw_from_wl(self, wavelength: float):
+    def _cw_from_wl(self, wavelength: float) -> bool:
         cw = (wavelength - self.wavelength) > 0
         cw = not (cw ^ self.greater_wl_cw)
         return cw
@@ -492,8 +495,8 @@ class Monochromator:
     def limit_switch(self):
         return self._limit_switch
 
-    def load_calibration(self, path: str):  # wavelength
-        # TODO: make a better implementation of calibration loading.
+    def load_calibration(self, path: pathlib.Path):  # wavelength
+        # TODO: migrate to toml and use a typed dict
         with open(path, "r") as f:
             self._calibration = yaml.full_load(f)
         for param in self._calibration:
@@ -507,15 +510,16 @@ class Monochromator:
             print("Calibration is incomplete.")
 
     def calibrate(self):
+        # I could delete this, this is really not needed
         ui.SpectrometerCalibrationInterface(self).cmdloop()
         # TODO: make a better implementation of calibration loading.
         self.load_calibration(self.calibration_path)
 
     def swipe_wavelengths(
         self,
-        starting_wavelength: float = None,
-        ending_wavelength: float = None,
-        wavelength_step: float = None,
+        starting_wavelength: float | None = None,
+        ending_wavelength: float | None = None,
+        wavelength_step: float | None = None,
     ):
         if starting_wavelength is None:
             starting_wavelength = self.min_wl
@@ -530,7 +534,7 @@ class Monochromator:
         for i in range(n_measurements):
             yield self.goto_wavelength(starting_wavelength + i * wavelength_step)
 
-    def home(self, set_wavelength=True, ignore_limit=False):
+    def home(self, set_wavelength=True, ignore_limit=False) -> None:
         steps_done = 0
         # This ensures ending wavelength is above 0.
         if ignore_limit:
@@ -574,9 +578,9 @@ class Spectrometer(abstract.Spectrometer):
     @classmethod
     def constructor_default(
         cls,
-        excitation_mono: Monochromator = None,
-        emission_mono: Monochromator = None,
-        osc=None,  #: rpp.osci.Oscilloscope = None,
+        excitation_mono: Monochromator | None = None,
+        emission_mono: Monochromator | None = None,
+        osc: rpp.osci.Oscilloscope | None = None,
         home: bool = False,
     ):
         if excitation_mono is None:
@@ -592,7 +596,7 @@ class Spectrometer(abstract.Spectrometer):
         return cls(excitation_mono, emission_mono, osc, home=home)
 
     # TODO: leave this method here or directly call self.emission_mono.goto_wavelength
-    def goto_wavelength(self, wavelength):
+    def goto_wavelength(self, wavelength) ->:
         return self.emission_mono.goto_wavelength(wavelength)
 
     def goto_excitation_wavelength(self, wavelength):
@@ -601,10 +605,14 @@ class Spectrometer(abstract.Spectrometer):
     def get_emission(
         self,
         integration_time: float,
-        excitation_wavelength: float = None,
-        feed: callable = None,
+        excitation_wavelength: float | None = None,
+        feed: callable | None = None,
         **kwargs,
-    ):
+    ) -> pd.DataFrame:
+        # TODO: construct dataframe from a dataclass
+        if not excitation_wavelength:
+            excitation_wavelength = self.excitation_mono.wavelength
+
         df = self.get_spectrum(
             integration_time=integration_time,
             static_wavelength=excitation_wavelength,
@@ -619,10 +627,10 @@ class Spectrometer(abstract.Spectrometer):
     def get_excitation(
         self,
         integration_time: float,
-        emission_wavelength: float = None,
-        feed: callable = None,
+        emission_wavelength: float | None = None,
+        feed: callable | None = None,
         **kwargs,
-    ):
+    ) -> pd.DataFrame:
         df = self.get_spectrum(
             integration_time=integration_time,
             static_wavelength=emission_wavelength,
@@ -637,11 +645,11 @@ class Spectrometer(abstract.Spectrometer):
     def get_spectrum(
         self,
         integration_time: float,
-        static_wavelength: float = None,
+        static_wavelength: float | None = None,
         emission: bool = True,
         feed=None,
         **kwargs,
-    ):
+    ) -> pd.DataFrame:
         if emission:
             static_mono = self.excitation_mono
         else:
@@ -663,12 +671,12 @@ class Spectrometer(abstract.Spectrometer):
         self,
         integration_time: float,
         emission: bool = True,
-        starting_wavelength: float = None,
-        ending_wavelength: float = None,
-        wavelength_step: float = None,
+        starting_wavelength: float | None = None,
+        ending_wavelength: float | None = None,
+        wavelength_step: float | None = None,
         rounds: int = 1,
         feed_wl=None,
-    ):
+    ) -> Generator[dict]:
         if emission:
             monochromator = self.emission_mono
         else:
@@ -689,7 +697,7 @@ class Spectrometer(abstract.Spectrometer):
             )
             yield dict(wavelength=wl, counts=photons, integration_time=time_measured)
 
-    def get_intensity(self, seconds, rounds: int = 1, feed_data=None):
+    def get_intensity(self, seconds, rounds: int = 1, feed_data=None) -> tuple[int, float]:
         photons = 0
         # TODO: see if this loop can be moved to a lower level stage
         # so that it takes less time to complete.
@@ -704,7 +712,7 @@ class Spectrometer(abstract.Spectrometer):
         )
         return photons, time_measured
 
-    def integrate(self, seconds):
+    def integrate(self, seconds) -> int:
         # TODO: timebase should always be at maximum sampling rate.
         # change this function to integrate for any amount of seconds
         # but keep msr.
@@ -726,22 +734,24 @@ class Spectrometer(abstract.Spectrometer):
         # photons = self._count_photons(osc_screen[configs.OSC_CHANNEL])
         return photons
 
-    def _count_pulses(self, data):
+    def _count_pulses(self, data) -> int:
         binarized = data < configs.VOLTAGE_THRESHOLD
         edges = binarized[1:] & ~binarized[:-1]
         return np.count_nonzero(edges)
 
-    def _find_arrival_times(self, data):
+    def _find_arrival_times(self, data) -> npt.NDArray:
         # TODO: calibrate this
         return data.iloc[np.where(np.diff(data.ch1) > configs.PEAK_THRESHOLD)[0]]
 
-    def set_wavelength(self, wavelength: float):
+    def set_wavelength(self, wavelength: float) -> None:
+        # TODO: delete this return
         return self.emission_mono.set_wavelength(wavelength)
 
-    def set_excitation_wavelength(self, wavelength: float):
+    def set_excitation_wavelength(self, wavelength: float) -> None:
+        # TODO: delete this return
         return self.excitation_mono.set_wavelength(wavelength)
 
-    def home(self, excitation=True, emission=True):
+    def home(self, excitation=True, emission=True) -> None:
         if excitation:
             self.excitation_mono.home()
             print(f"Lamp wavelength should be {self.excitation_mono.home_wavelength}")
@@ -754,7 +764,7 @@ class Spectrometer(abstract.Spectrometer):
             "If they are wrong, set them with spec.lamp.set_wavelength() and spec.monochromator.set_wavelength()"
         )
 
-    def set_decay_configuration(self, decimation=2):
+    def set_decay_configuration(self, decimation=2) -> float:
         trace_duration = self._osc.set_decimation(decimation)
         # TODO: this has to be changed in the Osci API so that you don't have to specify
         # a time when you ask for full buffer
@@ -765,7 +775,7 @@ class Spectrometer(abstract.Spectrometer):
         self._osc.set_trigger_delay(1)
         return trace_duration
 
-    def acquire_decay(self, max_delay=1, step: float = 1, amount_buffers=1, feed=None):
+    def acquire_decay(self, max_delay=1, step: float = 1, amount_buffers=1, feed=None) -> pd.DataFrame:
         self.set_decay_configuration()
         arrival_times = np.array([])
         for buff_offset in np.arange(1, max_delay + 1, step):

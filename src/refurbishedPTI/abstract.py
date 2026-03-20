@@ -2,7 +2,7 @@ import time
 from abc import ABC, abstractmethod
 
 
-class Motor(ABC):
+class StepperMotor(ABC):
     @abstractmethod
     def __init__(self):
         pass
@@ -11,6 +11,10 @@ class Motor(ABC):
     def rotate(self, angle: float, cw: bool):
         pass
         # informarle al driver cuantos pulsos y direccion
+
+    @abstractmethod
+    def rotate_step(self, steps: int, cw: bool):
+        pass
 
 
 class Spectrometer(ABC):
