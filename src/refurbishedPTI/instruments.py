@@ -12,6 +12,7 @@ Refurbished HoribaPTI instruments.
 import pathlib
 import time
 from typing import Generator, Literal, Type
+from collections.abc import Callable
 
 import numpy as np
 import numpy.typing as npt
@@ -19,6 +20,8 @@ import pandas as pd
 import pyvisa
 import redpipy as rpp
 import yaml
+
+from redpipy.rpwrap import constants
 
 from . import abstract, configs
 from . import user_interface as ui
@@ -606,7 +609,7 @@ class Spectrometer(abstract.Spectrometer):
         self,
         integration_time: float,
         excitation_wavelength: float | None = None,
-        feed: callable | None = None,
+        feed: Callable | None = None,
         **kwargs,
     ) -> pd.DataFrame:
         # TODO: construct dataframe from a dataclass
@@ -628,7 +631,7 @@ class Spectrometer(abstract.Spectrometer):
         self,
         integration_time: float,
         emission_wavelength: float | None = None,
-        feed: callable | None = None,
+        feed: Callable | None = None,
         **kwargs,
     ) -> pd.DataFrame:
         df = self.get_spectrum(
@@ -676,7 +679,7 @@ class Spectrometer(abstract.Spectrometer):
         wavelength_step: float | None = None,
         rounds: int = 1,
         feed_wl=None,
-    ) -> Generator[dict]:
+    ) -> Generator[dict, None, None]:
         if emission:
             monochromator = self.emission_mono
         else:
@@ -721,6 +724,7 @@ class Spectrometer(abstract.Spectrometer):
         t_2nd_dec = 0.00026 * 2
         reps = int(seconds / t_2nd_dec)
         photons = 0
+        # TODO: should change this to set_decimation
         self._osc.set_timebase(t_2nd_dec)
         buffer = np.empty(self._osc._amount_datapoints, dtype=np.float32)
         for rep in range(reps):
@@ -734,7 +738,7 @@ class Spectrometer(abstract.Spectrometer):
         # TODO: calibrate this
         return data.iloc[np.where(np.diff(data.ch1) > configs.PEAK_THRESHOLD)[0]]
 
-    def _get_edges(self, data) -> npt.NDArray:
+    def _get_edges(self, data: npt.NDArray) -> npt.NDArray:
         binarized = data < configs.VOLTAGE_THRESHOLD
         return binarized[1:] & ~binarized[:-1]
 
@@ -776,10 +780,246 @@ class Spectrometer(abstract.Spectrometer):
         self.set_decay_configuration()
         arrival_times = np.array([])
         for buff_offset in np.arange(1, max_delay + 1, step):
-            print(f"{buff_offset=}")
             self._osc.set_trigger_delay(buff_offset)
             for buff in range(amount_buffers):
-                print(f"{buff=}")
+                self._osc.arm_trigger()
+                data = self._osc.get_data()
+                times = np.array(self._find_arrival_times(data).time)
+                if feed:
+                    feed(times)
+                arrival_times = np.hstack((arrival_times, times))
+        return pd.DataFrame(dict(arrival_times=arrival_times))
+
+
+class AxiSpectrometer(abstract.Spectrometer):
+    def __init__(
+        self,
+        excitation_mono: Monochromator,
+        emission_mono: Monochromator,
+        osc: rpp.osci_axi.AxiOscilloscope,
+        home: bool = False,
+    ):
+        self.excitation_mono = excitation_mono
+        self.emission_mono = emission_mono
+
+        self._osc = osc
+        self._osc.channel2.enable()
+        self._osc.channel2.set_gain(5)
+        self._osc.configure_trigger()
+
+        if home:
+            self.emission_mono.home()
+            self.excitation_mono.home()
+
+    @classmethod
+    def constructor_default(
+        cls,
+        excitation_mono: Monochromator | None = None,
+        emission_mono: Monochromator | None = None,
+        osc: rpp.osci_axi.AxiOscilloscope | None = None,
+        home: bool = False,
+    ):
+        if excitation_mono is None:
+            excitation_mono = Monochromator.constructor_default(
+                **configs.EXCITATION_MONO_DRIVER
+            )
+        if emission_mono is None:
+            emission_mono = Monochromator.constructor_default(
+                **configs.EMISSION_MONO_DRIVER
+            )
+        if osc is None:
+            osc = rpp.AxiOscilloscope(constants.ChannelConfig.CH2_ONLY)
+        return cls(excitation_mono, emission_mono, osc, home=home)
+
+    # TODO: leave this method here or directly call self.emission_mono.goto_wavelength
+    def goto_wavelength(self, wavelength):
+        return self.emission_mono.goto_wavelength(wavelength)
+
+    def goto_excitation_wavelength(self, wavelength):
+        return self.excitation_mono.goto_wavelength(wavelength)
+
+    def get_emission(
+        self,
+        integration_time: float,
+        excitation_wavelength: float | None = None,
+        feed: Callable | None = None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        # TODO: construct dataframe from a dataclass
+        if not excitation_wavelength:
+            excitation_wavelength = self.excitation_mono.wavelength
+
+        df = self.get_spectrum(
+            integration_time=integration_time,
+            static_wavelength=excitation_wavelength,
+            emission=True,
+            feed=feed,
+            **kwargs,
+        )
+        df.attrs["type"] = "emission_spectrum"
+        df.attrs["excitation_wavelength"] = excitation_wavelength
+        return df
+
+    def get_excitation(
+        self,
+        integration_time: float,
+        emission_wavelength: float | None = None,
+        feed: Callable | None = None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        df = self.get_spectrum(
+            integration_time=integration_time,
+            static_wavelength=emission_wavelength,
+            emission=False,
+            feed=feed,
+            **kwargs,
+        )
+        df.attrs["type"] = "excitation_spectrum"
+        df.attrs["emission_wavelength"] = emission_wavelength
+        return df
+
+    def get_spectrum(
+        self,
+        integration_time: float,
+        static_wavelength: float | None = None,
+        emission: bool = True,
+        feed=None,
+        **kwargs,
+    ) -> pd.DataFrame:
+        if emission:
+            static_mono = self.excitation_mono
+        else:
+            static_mono = self.emission_mono
+
+        if static_wavelength is not None:
+            static_mono.goto_wavelength(static_wavelength)
+        spectrum_iterator = self._yield_spectrum(
+            emission=emission, integration_time=integration_time, **kwargs
+        )
+        data = []
+        for el in spectrum_iterator:
+            data.append(el)
+            if feed is not None:
+                feed(el)
+        return pd.DataFrame(data)
+
+    def _yield_spectrum(
+        self,
+        integration_time: float,
+        emission: bool = True,
+        starting_wavelength: float | None = None,
+        ending_wavelength: float | None = None,
+        wavelength_step: float | None = None,
+        rounds: int = 1,
+        feed_wl=None,
+    ) -> Generator[dict, None, None]:
+        if emission:
+            monochromator = self.emission_mono
+        else:
+            monochromator = self.excitation_mono
+        for i, wl in enumerate(
+            monochromator.swipe_wavelengths(
+                starting_wavelength=starting_wavelength,
+                ending_wavelength=ending_wavelength,
+                wavelength_step=wavelength_step,
+            )
+        ):
+            if feed_wl is not None:
+                feed_data = feed_wl(wl)
+            else:
+                feed_data = None
+            photons, time_measured = self.get_intensity(
+                integration_time, rounds, feed_data=feed_data
+            )
+            yield dict(wavelength=wl, counts=photons, integration_time=time_measured)
+
+    def get_intensity(
+        self, seconds, rounds: int = 1, feed_data=None
+    ) -> tuple[int, float]:
+        photons = 0
+        # TODO: see if this loop can be moved to a lower level stage
+        # so that it takes less time to complete.
+        for _ in range(rounds):
+            photons += self.integrate(seconds)
+        # TODO: check if amount_datapoints works with new API. Res: works with _ at beginning
+        # TODO: change osci API or find another solution to amount_datapoints
+        time_measured = (
+            rounds
+            * self._osc._amount_datapoints
+            / self._osc.get_timebase_settings()["sampling_rate"]
+        )
+        return photons, time_measured
+
+    def integrate(self, seconds) -> int:
+        photons = 0
+        trace_duration = self._osc.set_decimation(2)
+        reps = int(np.floor(seconds / trace_duration))
+        buffer = np.empty(self._osc._amount_datapoints, dtype=np.float32)
+        delay_samples = self._osc.get_timebase_settings()["trigger_delay_ch2_samples"]
+
+        for rep in range(reps):
+            self._osc.trigger_now(self._osc.channel2)
+            data = self._osc.get_voltage_numpy(
+                "ch2", delay_samples=delay_samples, out=buffer
+            )
+            photons += np.count_nonzero(self._get_edges(data))
+
+        # downshoot now, then correct
+        self._osc.set_timebase(seconds / trace_duration - reps)
+        self._osc.trigger_now(self._osc.channel2)
+        data = self._osc.get_voltage_numpy("ch2")
+        photons += np.count_nonzero(self._get_edges(data))
+
+        return photons
+
+    def _find_arrival_times(self, data) -> npt.NDArray:
+        # TODO: calibrate this
+        return data.iloc[np.where(np.diff(data.ch1) > configs.PEAK_THRESHOLD)[0]]
+
+    def _get_edges(self, data: npt.NDArray) -> npt.NDArray:
+        binarized = data < configs.VOLTAGE_THRESHOLD
+        return binarized[1:] & ~binarized[:-1]
+
+    def set_wavelength(self, wavelength: float) -> None:
+        # TODO: delete this return
+        return self.emission_mono.set_wavelength(wavelength)
+
+    def set_excitation_wavelength(self, wavelength: float) -> None:
+        # TODO: delete this return
+        return self.excitation_mono.set_wavelength(wavelength)
+
+    def home(self, excitation=True, emission=True) -> None:
+        if excitation:
+            self.excitation_mono.home()
+            print(f"Lamp wavelength should be {self.excitation_mono.home_wavelength}")
+        if emission:
+            self.emission_mono.home()
+            print(
+                f"Monochromator wavelength should be {self.emission_mono.home_wavelength}"
+            )
+        print(
+            "If they are wrong, set them with spec.lamp.set_wavelength() and spec.monochromator.set_wavelength()"
+        )
+
+    def set_decay_configuration(self, decimation=2) -> float:
+        trace_duration = self._osc.set_decimation(decimation)
+        # TODO: this has to be changed in the Osci API so that you don't have to specify
+        # a time when you ask for full buffer
+        # trace_duration = self._osc.set_timebase(decimation=decimation)
+        self._osc.channel2.enabled = True
+        self._osc.channel2.set_gain(5)
+        self._osc.configure_trigger(source="ch2", level=1.0, positive_edge=False)
+        self._osc.set_trigger_delay(1)
+        return trace_duration
+
+    def acquire_decay(
+        self, max_delay=1, step: float = 1, amount_buffers=1, feed=None
+    ) -> pd.DataFrame:
+        self.set_decay_configuration()
+        arrival_times = np.array([])
+        for buff_offset in np.arange(1, max_delay + 1, step):
+            self._osc.set_trigger_delay(buff_offset)
+            for buff in range(amount_buffers):
                 self._osc.arm_trigger()
                 data = self._osc.get_data()
                 times = np.array(self._find_arrival_times(data).time)
