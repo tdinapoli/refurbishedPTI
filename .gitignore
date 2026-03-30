@@ -165,3 +165,6 @@ requierements.txt
 calibration-files# pixi environments
 .pixi/*
 !.pixi/config.toml
+
+test_axi_osc.py
+test_axi.py
