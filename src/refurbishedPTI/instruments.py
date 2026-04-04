@@ -279,7 +279,38 @@ class ITC4020:
     def keylock_tripped(self):
         return bool(int(self.itc.query("output:protection:keylock:tripped?")))
 
-
+    @property
+    def period(self):
+        """
+        Queries the pulse period of QCW mode. 
+        Return value in seconds.
+        """
+        return float(self.itc.query("source:pulse:period?"))
+    
+    @period.setter
+    def period(self, value):
+        """
+        Sets the pulse period of QCW mode. 
+        The 'value' units are seconds.
+        """
+        self.itc.write(f"source:pulse:period {value}")
+    
+    @property
+    def pulse_width(self):
+        """
+        Queries the pulse width of QCW mode. 
+        Return value in seconds.
+        """
+        return float(self.itc.query("source:pulse:width?"))
+    
+    @pulse_width.setter
+    def pulse_width(self, value):
+        """
+        Sets the pulse width of QCW mode. 
+        The 'value' units are seconds.
+        """
+        self.itc.write(f"source:pulse:width {value}")
+    
 class DRV8825(abstract.MotorDriver):
     ttls: dict
     _MODES = (
