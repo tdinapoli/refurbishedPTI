@@ -877,73 +877,131 @@ class AxiSpectrometer(abstract.Spectrometer):
     def get_emission(
         self,
         integration_time: float,
+        starting_wavelength: float,
+        ending_wavelength: float,
+        wavelength_step: float,
         excitation_wavelength: float | None = None,
-        feed: Callable | None = None,
-        **kwargs,
     ) -> pd.DataFrame:
-        # TODO: construct dataframe from a dataclass
-        if not excitation_wavelength:
-            excitation_wavelength = self.excitation_mono.wavelength
+        """Acquire an emission spectrum by sweeping the emission monochromator.
+
+        Parameters
+        ----------
+        integration_time
+            Photon counting time per wavelength point (in seconds).
+        starting_wavelength
+            First wavelength of the sweep (in nm).
+        ending_wavelength
+            Last wavelength of the sweep (in nm).
+        wavelength_step
+            Step between consecutive wavelengths (in nm).
+        excitation_wavelength, optional
+            Wavelength to move the excitation monochromator to before the sweep
+            (in nm), by default None (keep the current one).
+
+        Returns
+        -------
+        DataFrame with columns wavelength (nm), counts (photons) and
+        integrated_time (seconds). The excitation wavelength (nm) is stored in
+        df.attrs["excitation_wavelength"].
+        """
+        if excitation_wavelength:
+            self.excitation_mono.goto_wavelength(excitation_wavelength)
 
         df = self.get_spectrum(
-            integration_time=integration_time,
-            static_wavelength=excitation_wavelength,
+            integration_time,
+            starting_wavelength,
+            ending_wavelength,
+            wavelength_step,
             emission=True,
-            feed=feed,
-            **kwargs,
         )
         df.attrs["type"] = "emission_spectrum"
-        df.attrs["excitation_wavelength"] = excitation_wavelength
+        df.attrs["excitation_wavelength"] = self.excitation_mono.wavelength
         return df
 
     def get_excitation(
         self,
         integration_time: float,
+        starting_wavelength: float,
+        ending_wavelength: float,
+        wavelength_step: float,
         emission_wavelength: float | None = None,
-        feed: Callable | None = None,
-        **kwargs,
     ) -> pd.DataFrame:
+        """Acquire an excitation spectrum by sweeping the excitation monochromator.
+
+        Parameters
+        ----------
+        integration_time
+            Photon counting time per wavelength point (in seconds).
+        starting_wavelength
+            First wavelength of the sweep (in nm).
+        ending_wavelength
+            Last wavelength of the sweep (in nm).
+        wavelength_step
+            Step between consecutive wavelengths (in nm).
+        emission_wavelength, optional
+            Wavelength to move the emission monochromator to before the sweep
+            (in nm), by default None (keep the current one).
+
+        Returns
+        -------
+        DataFrame with columns wavelength (nm), counts (photons) and
+        integrated_time (seconds). The emission wavelength (nm) is stored in
+        df.attrs["emission_wavelength"].
+        """
+        if emission_wavelength:
+            self.emission_mono.goto_wavelength(emission_wavelength)
+
         df = self.get_spectrum(
-            integration_time=integration_time,
-            static_wavelength=emission_wavelength,
+            integration_time,
+            starting_wavelength,
+            ending_wavelength,
+            wavelength_step,
             emission=False,
-            feed=feed,
-            **kwargs,
         )
+
         df.attrs["type"] = "excitation_spectrum"
-        df.attrs["emission_wavelength"] = emission_wavelength
+        df.attrs["emission_wavelength"] = self.emission_mono.wavelength
         return df
 
     def get_spectrum(
         self,
         integration_time: float,
-        static_wavelength: float | None = None,
+        starting_wavelength: float,
+        ending_wavelength: float,
+        wavelength_step: float,
         emission: bool = True,
-        feed=None,
-        **kwargs,
     ) -> pd.DataFrame:
+        """Sweep one monochromator and count photons at each wavelength.
+
+        Parameters
+        ----------
+        integration_time
+            Photon counting time per wavelength point (in seconds).
+        starting_wavelength
+            First wavelength of the sweep (in nm).
+        ending_wavelength
+            Last wavelength of the sweep (in nm).
+        wavelength_step
+            Step between consecutive wavelengths (in nm).
+        emission, optional
+            Sweep the emission monochromator if True, the excitation one if
+            False, by default True.
+
+        Returns
+        -------
+        DataFrame with columns wavelength (nm), counts (photons) and
+        integrated_time (seconds).
+        """
         if emission:
-            static_mono = self.excitation_mono
+            iterator_mono = self.emission_mono
         else:
-            static_mono = self.emission_mono
-
-        if static_wavelength is not None:
-            static_mono.goto_wavelength(static_wavelength)
+            iterator_mono = self.excitation_mono
         spectrum_iterator = self._yield_spectrum(
-            emission=emission, integration_time=integration_time, **kwargs
-        )
-        data = []
-        for el in spectrum_iterator:
-            data.append(el)
-            if feed is not None:
-                feed(el)
-        return pd.DataFrame(data)
-
-    def get_spectrum_fast(
-        self, buffers: int, starting_wavelength: float, ending_wavelength: float
-    ):
-        spectrum_iterator = self._yield_spectrum_fast(
-            buffers, starting_wavelength, ending_wavelength, wavelength_step=1
+            iterator_mono,
+            integration_time,
+            starting_wavelength,
+            ending_wavelength,
+            wavelength_step,
         )
         data = []
         for el in spectrum_iterator:
@@ -952,42 +1010,32 @@ class AxiSpectrometer(abstract.Spectrometer):
 
     def _yield_spectrum(
         self,
+        monochromator: Monochromator,
         integration_time: float,
-        emission: bool = True,
-        starting_wavelength: float | None = None,
-        ending_wavelength: float | None = None,
-        wavelength_step: float | None = None,
-        rounds: int = 1,
-        feed_wl=None,
-    ) -> Generator[dict, None, None]:
-        if emission:
-            monochromator = self.emission_mono
-        else:
-            monochromator = self.excitation_mono
-        for i, wl in enumerate(
-            monochromator.swipe_wavelengths(
-                starting_wavelength=starting_wavelength,
-                ending_wavelength=ending_wavelength,
-                wavelength_step=wavelength_step,
-            )
-        ):
-            if feed_wl is not None:
-                feed_data = feed_wl(wl)
-            else:
-                feed_data = None
-            photons, time_measured = self.get_intensity(
-                integration_time, rounds, feed_data=feed_data
-            )
-            yield dict(wavelength=wl, counts=photons, integration_time=time_measured)
-
-    def _yield_spectrum_fast(
-        self,
-        buffers: int,
         starting_wavelength: float,
         ending_wavelength: float,
         wavelength_step: float,
     ) -> Generator[dict, None, None]:
-        monochromator = self.emission_mono
+        """Step a monochromator through a wavelength range, integrating at each point.
+
+        Parameters
+        ----------
+        monochromator
+            Monochromator to sweep.
+        integration_time
+            Photon counting time per wavelength point (in seconds).
+        starting_wavelength
+            First wavelength of the sweep (in nm).
+        ending_wavelength
+            Last wavelength of the sweep (in nm).
+        wavelength_step
+            Step between consecutive wavelengths (in nm).
+
+        Returns
+        -------
+        Generator of dicts with keys wavelength (nm), counts (photons) and
+        integrated_time (seconds), one per wavelength point.
+        """
         for i, wl in enumerate(
             monochromator.swipe_wavelengths(
                 starting_wavelength=starting_wavelength,
@@ -995,72 +1043,88 @@ class AxiSpectrometer(abstract.Spectrometer):
                 wavelength_step=wavelength_step,
             )
         ):
-            photons, time_measured = self.integrate_fast(buffers)
-            yield dict(wavelength=wl, counts=photons, integration_time=time_measured)
+            counts, integrated_time = self.integrate(integration_time=integration_time)
+            yield dict(wavelength=wl, counts=counts, integrated_time=integrated_time)
 
-    def get_intensity(
-        self, seconds, rounds: int = 1, feed_data=None
-    ) -> tuple[int, float]:
-        photons = 0
-        # TODO: see if this loop can be moved to a lower level stage
-        # so that it takes less time to complete.
-        for _ in range(rounds):
-            photons += self.integrate(seconds)
-        # TODO: check if amount_datapoints works with new API. Res: works with _ at beginning
-        # TODO: change osci API or find another solution to amount_datapoints
-        time_measured = (
-            rounds
-            * self._osc._amount_datapoints
-            / self._osc.get_timebase_settings()["sampling_rate"]
-        )
-        return photons, time_measured
+    def _get_integration_partition(self, integration_time) -> tuple[int, int, float]:
+        """Split an integration time into full DMA buffers plus leftover samples.
 
-    def integrate(self, seconds) -> int:
-        photons = 0
-        trace_duration = self._osc.set_decimation(2)
-        reps = int(np.floor(seconds / trace_duration))
-        buffer = np.empty(self._osc._amount_datapoints, dtype=np.float32)
-        delay_samples = self._osc.get_timebase_settings()["trigger_delay_ch1_samples"]
+        Uses the oscilloscope's current sampling rate and trace duration, so the
+        decimation must be set before calling this.
 
-        for rep in range(reps):
-            self._osc.trigger_now(self._osc.channel1)
-            data = self._osc.get_voltage_numpy(
-                "ch1", delay_samples=delay_samples, out=buffer
-            )
-            photons += np.count_nonzero(self._get_edges(data))
+        Parameters
+        ----------
+        integration_time
+            Total time to integrate (in seconds).
 
-        # downshoot now, then correct
-        self._osc.set_timebase(seconds / trace_duration - reps)
-        self._osc.trigger_now(self._osc.channel1)
-        data = self._osc.get_voltage_numpy("ch1")
-        photons += np.count_nonzero(self._get_edges(data))
+        Returns
+        -------
+        Tuple of (full_buffers, remainder_samples, integrated_time): the number of
+        full DMA buffers to acquire, the extra samples to read after them (in
+        samples), and the time actually covered (in seconds). integrated_time is
+        at most one sample period shorter than integration_time.
+        """
 
-        return photons
+        settings = self._osc.get_timebase_settings()
+        rate, trace_duration = settings["sampling_rate"], settings["trace_duration"]
 
-    def integrate_fast(self, buffers: int) -> tuple[int, float]:
-        count = 0
-        trace_duration = self._osc.set_decimation(decimation_exponent=2)
-        integration_time = trace_duration * buffers
+        iterations, remainder = np.divmod(integration_time, trace_duration)
+        remainder_samples = int(remainder * rate)
+
+        integrated_time = iterations * trace_duration + remainder_samples / rate
+
+        return int(iterations), remainder_samples, integrated_time
+
+    def integrate(self, integration_time: float) -> tuple[int, float]:
+        """Count photons on channel 1 for a given time.
+
+        Acquires as many full DMA buffers as fit in the time, then one partial
+        buffer for the rest. Sets decimation exponent 2 and the ch1 trigger delay.
+
+        Parameters
+        ----------
+        integration_time
+            Time to count photons for (in seconds).
+
+        Returns
+        -------
+        Tuple of (counts, integrated_time): the number of photons detected
+        (counts) and the time actually sampled (in seconds).
+        """
+        self._osc.set_decimation(decimation_exponent=2)
 
         self._osc.set_trigger_delay(
             self._osc.channel1, delay=constants.DMA_BUFFER_SIZE, units="samples"
         )
-        for i in range(buffers):
+
+        reps, remainder_samples, integrated_time = self._get_integration_partition(
+            integration_time
+        )
+        count = 0
+
+        # Full buffer iterations
+        for i in range(reps):
             self._osc.trigger_now(self._osc.channel1)
 
             buffer_slices = self._osc.channel1.get_trace_direct()
             for slice in buffer_slices:
                 count += rppulses.count(slice, configs.RAW_HIGH_PEAK_THRESHOLD)
 
-        return count, integration_time
+        # Partial buffer for completion
+        if remainder_samples > 0:
+            self._osc.set_trigger_delay(
+                self._osc.channel1,
+                delay=remainder_samples,
+                units="samples",
+            )
 
-    def _find_arrival_times(self, data) -> npt.NDArray:
-        # TODO: calibrate this
-        return data.iloc[np.where(np.diff(data.ch1) > configs.PEAK_THRESHOLD)[0]]
+            self._osc.trigger_now(self._osc.channel1)
 
-    def _get_edges(self, data: npt.NDArray) -> npt.NDArray:
-        binarized = data < configs.VOLTAGE_THRESHOLD
-        return binarized[1:] & ~binarized[:-1]
+            buffer_slices = self._osc.channel1.get_trace_direct(remainder_samples)
+            for slice in buffer_slices:
+                count += rppulses.count(slice, configs.RAW_HIGH_PEAK_THRESHOLD)
+
+        return (count, integrated_time)
 
     def set_wavelength(self, wavelength: float) -> None:
         # TODO: delete this return
@@ -1083,77 +1147,55 @@ class AxiSpectrometer(abstract.Spectrometer):
             "If they are wrong, set them with spec.lamp.set_wavelength() and spec.monochromator.set_wavelength()"
         )
 
-    # def set_decay_configuration(self) -> float:
-    #     trace_duration = self._osc.set_decimation(decimation_exponent=2)
-    #     # TODO: this has to be changed in the Osci API so that you don't have to specify
-    #     # a time when you ask for full buffer
-    #     # trace_duration = self._osc.set_timebase(decimation=decimation)
-    #     self._osc.channel2.enabled = True
-    #     self._osc.channel2.set_gain(5)
-    #     self._osc.configure_trigger(source="ch2", level=1.0, positive_edge=False)
-    #     self._osc.set_trigger_delay(channel=self._osc.channel1, delay=1, units="second")
-    #     return trace_duration
+    def get_time_resolved(
+        self,
+        window: float,
+        target_counts: int,
+        resolution: float,
+        max_repetitions: int = 5000,
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.int64], int]:
+        """Build a histogram of photon arrival times after the excitation pulse.
 
-    # def acquire_decay(
-    #     self, max_delay=1, step: float = 1, amount_buffers=1, feed=None
-    # ) -> pd.DataFrame:
-    #     self.set_decay_configuration()
-    #     arrival_times = np.array([])
-    #     for buff_offset in np.arange(1, max_delay + 1, step):
-    #         self._osc.set_trigger_delay(buff_offset)
-    #         for buff in range(amount_buffers):
-    #             self._osc.arm_trigger()
-    #             data = self._osc.get_data()
-    #             times = np.array(self._find_arrival_times(data).time)
-    #             if feed:
-    #                 feed(times)
-    #             arrival_times = np.hstack((arrival_times, times))
-    #     return pd.DataFrame(dict(arrival_times=arrival_times))
+        Triggers on the falling edge of channel 2 and counts photons on channel 1
+        for `window` seconds after each trigger. Repeats until the histogram holds
+        `target_counts` photons or `max_repetitions` acquisitions have been made.
 
-    def acquire_decay_fast(
-        self, seconds_per_window=1, repetitions: int = 1
-    ) -> pd.DataFrame:
+        Parameters
+        ----------
+        window
+            Time acquired after each trigger (in seconds). Must fit in the DMA
+            buffer.
+        target_counts
+            Total photons to collect before stopping (in counts).
+        resolution
+            Width of each histogram bin (in seconds). Rounded to a whole number
+            of samples, with a minimum one sample.
+        max_repetitions, optional
+            Maximum number of triggered acquisitions, by default 5000.
+
+        Returns
+        -------
+        Tuple of (times, counts, repetitions).
+        """
+        
+        if max_repetitions <= 0:
+            raise ValueError("No repetitions setted")
+        
         self._osc.set_decimation(decimation_exponent=2)
         self._osc.channel2.enabled = True
         self._osc.channel2.set_gain(5)
         self._osc.configure_trigger(source="ch2", level=1.0, positive_edge=False)
 
         samples = self._osc.set_trigger_delay(
-            channel=self._osc.channel1, delay=seconds_per_window, units="second"
-        )
-        chunks = []
-        for _ in range(repetitions):
-            last = 0
-            self._osc.arm_trigger(self._osc.channel1)
-            buffer_slices = self._osc.channel1.get_trace_direct(size=samples)
-
-            for slice in buffer_slices:
-                idx = rppulses.find(slice, configs.RAW_HIGH_PEAK_THRESHOLD)
-                chunks.append(idx + last)
-                last = slice.size
-
-        arrival_idx = np.concatenate(chunks)
-        rate = self._osc.get_timebase_settings()["sampling_rate"]
-        return pd.DataFrame(dict(arrival_times=arrival_idx / rate))
-
-    def binned_acquire_decay_fast(
-        self, seconds_per_window: float, bin_width: float, repetitions: int = 1
-    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.int64]]:
-        self._osc.set_decimation(decimation_exponent=2)
-        self._osc.channel2.enabled = True
-        self._osc.channel2.set_gain(5)
-        self._osc.configure_trigger(source="ch2", level=1.0, positive_edge=False)
-
-        samples = self._osc.set_trigger_delay(
-            channel=self._osc.channel1, delay=seconds_per_window, units="second"
+            channel=self._osc.channel1, delay=window, units="second"
         )
 
         rate = self._osc.get_timebase_settings()["sampling_rate"]
-        samples_per_bin = max(int(round(bin_width * rate)), 1)
+        samples_per_bin = max(int(round(resolution * rate)), 1)
         bins = samples // samples_per_bin
+        counts = np.zeros(bins, dtype=np.int64)
 
-        hist = np.zeros(bins, dtype=np.int64)
-        for _ in range(repetitions):
+        for i in range(max_repetitions):
             last = 0
             self._osc.arm_trigger(self._osc.channel1)
             buffer_slices = self._osc.channel1.get_trace_direct(size=samples)
@@ -1161,8 +1203,11 @@ class AxiSpectrometer(abstract.Spectrometer):
             for slice in buffer_slices:
                 idx = rppulses.find(slice, configs.RAW_HIGH_PEAK_THRESHOLD) + last
                 bin_idx = idx // samples_per_bin
-                hist += np.bincount(bin_idx[bin_idx < bins], minlength=bins)
+                counts += np.bincount(bin_idx[bin_idx < bins], minlength=bins)
                 last += slice.size
 
+            if counts.sum() >= target_counts:
+                break
+
         times = np.arange(bins) * samples_per_bin / rate
-        return times, hist
+        return times, counts, i + 1
