@@ -40,6 +40,9 @@ content-type = "text/markdown"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+refurbishedPTI = ["configs/*.yaml"]
+
 [tool.setuptools.dynamic]
 dependencies = {file = "requirements.txt"}
 optional-dependencies.test = {file = "requirements.test.txt"}

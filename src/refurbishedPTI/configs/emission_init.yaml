@@ -1,0 +1,4 @@
+pin_step: !!python/tuple ["p", 3]
+pin_direction: !!python/tuple ["p", 2]
+limit_switch: !!python/tuple ["p", 7]
+calibration_path: null

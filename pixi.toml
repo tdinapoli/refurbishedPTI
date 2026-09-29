@@ -2,7 +2,7 @@
 authors = ["tdinapoli <tomas.dina98@gmail.com>"]
 channels = ["conda-forge"]
 name = "refurbishedPTI"
-platforms = ["linux-64"]
+platforms = ["linux-64", "osx-arm64"]
 version = "0.1.0"
 
 [tasks]
@@ -16,3 +16,4 @@ pyvisa ="*"
 
 [pypi-dependencies]
 redpipy = {path = "../redpipy", editable = true}
+rppulses = {path = "../rppulses", editable =true}
