@@ -630,7 +630,7 @@ class Spectrometer(abstract.Spectrometer):
             )
         if osc is None:
             osc = rpp.AxiOscilloscope()
-            return cls(excitation_mono, emission_mono, osc, home=home)
+        return cls(excitation_mono, emission_mono, osc, home=home)
 
     # TODO: leave this method here or directly call self.emission_mono.`g`oto_wavelength
     def goto_wavelength(self, wavelength):
