@@ -761,7 +761,7 @@ class Spectrometer(abstract.Spectrometer):
             iterator_mono = self.emission_mono
         else:
             iterator_mono = self.excitation_mono
-        spectrum_iterator = self._yield_spectrum(
+        spectrum_iterator = self.yield_spectrum(
             iterator_mono,
             integration_time,
             starting_wavelength,
@@ -773,7 +773,7 @@ class Spectrometer(abstract.Spectrometer):
             data.append(el)
         return pd.DataFrame(data)
 
-    def _yield_spectrum(
+    def yield_spectrum(
         self,
         monochromator: Monochromator,
         integration_time: float,
