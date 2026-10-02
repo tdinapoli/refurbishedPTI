@@ -950,7 +950,10 @@ class Spectrometer(abstract.Spectrometer):
         ):
             if counts.sum() >= target_counts:
                 break
-        return times, counts, repetitions
+        try:
+            return times, counts, repetitions
+        except UnboundLocalError:
+            return np.array([]), np.array([]), 0
 
     def yield_time_resolved(
         self,
