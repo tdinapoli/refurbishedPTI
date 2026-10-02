@@ -942,6 +942,44 @@ class Spectrometer(abstract.Spectrometer):
         -------
         Tuple of (times, counts, repetitions).
         """
+        for times, counts, repetitions in self.yield_time_resolved(
+            window, resolution, max_repetitions
+        ):
+            if counts.sum() >= target_counts:
+                break
+        return times, counts, repetitions
+
+    def yield_time_resolved(
+        self,
+        window: float,
+        resolution: float,
+        max_repetitions: int = 5000,
+    ) -> Generator[
+        tuple[npt.NDArray[np.float64], npt.NDArray[np.int64], int], None, None
+    ]:
+        """Accumulate a histogram of photon arrival times, yielding after each pulse.
+
+        Same acquisition as get_time_resolved, but yields the histogram after
+        every triggered acquisition so the caller can display it or stop early
+        (by breaking out of the loop) on its own criteria.
+
+        Parameters
+        ----------
+        window
+            Time acquired after each trigger (in seconds). Must fit in the DMA
+            buffer.
+        resolution
+            Width of each histogram bin (in seconds). Rounded to a whole number
+            of samples, with a minimum one sample.
+        max_repetitions, optional
+            Maximum number of triggered acquisitions, by default 5000.
+
+        Returns
+        -------
+        Generator of (times, counts, repetitions) tuples, one per acquisition.
+        times and counts are the same arrays every time; counts is updated in
+        place, so copy it to keep a snapshot.
+        """
 
         if max_repetitions <= 0:
             raise ValueError("No repetitions setted")
@@ -959,6 +997,7 @@ class Spectrometer(abstract.Spectrometer):
         samples_per_bin = max(int(round(resolution * rate)), 1)
         bins = samples // samples_per_bin
         counts = np.zeros(bins, dtype=np.int64)
+        times = np.arange(bins) * samples_per_bin / rate
 
         for i in range(max_repetitions):
             last = 0
@@ -971,8 +1010,4 @@ class Spectrometer(abstract.Spectrometer):
                 counts += np.bincount(bin_idx[bin_idx < bins], minlength=bins)
                 last += slice.size
 
-            if counts.sum() >= target_counts:
-                break
-
-        times = np.arange(bins) * samples_per_bin / rate
-        return times, counts, i + 1
+            yield times, counts, i + 1
