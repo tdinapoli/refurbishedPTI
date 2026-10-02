@@ -48,8 +48,11 @@ class DummyMonochromator:
         if wavelength_step is None:
             wavelength_step = abs(self.wl_step_ratio)
 
-        n_measurements = int(
-            (ending_wavelength - starting_wavelength) / wavelength_step
+        # +1 to include ending_wavelength. The small tolerance keeps float steps
+        # (e.g. 0.3 / 0.1 = 2.999...) from dropping a point, without ever going
+        # past ending_wavelength.
+        n_measurements = (
+            int((ending_wavelength - starting_wavelength) / wavelength_step + 1e-9) + 1
         )
         for i in range(n_measurements):
             yield self.goto_wavelength(starting_wavelength + i * wavelength_step)
